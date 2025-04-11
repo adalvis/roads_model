@@ -156,7 +156,7 @@ model_end = 10 #days
 tpe = TruckPassErosion(mg) #initialize component
 
 for i in range(0, model_end): #loop through model days
-    tpe.run_one_step(tire_tracks)
+    tpe.run_one_step(24,3)
     print(tpe.truck_num) #this is just to ensure the truck_num was changing
 
 #%% Cross section plot
