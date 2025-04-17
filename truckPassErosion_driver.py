@@ -1,10 +1,7 @@
 """
-Purpose: Basic stochastic truck pass erosion model
+Purpose: Basic stochastic truck pass erosion model driver
 Original creation: 03/12/2018
-Update: Added deposition, ditchline (03/27/2018)
-Update: Create field for roughness values (04/23/2018)
-Update: Deleting unnecessary code; streamlining; adding layers (03/19/2025)
-Update: Adding comments to the code (04/04/2025)
+Latest update: 04/17/2025
 Author: Amanda Alvis
 """
 #%% Load python packages and set some defaults
@@ -28,16 +25,16 @@ np.set_printoptions(threshold=np.inf)
 
 #%% Where are the truck tires on the elevation map?
 
-# From centerline (road_peak), the truck will extend 3 cells on either side. The tires 
-# themselves are the 4th cell from road_peak. This model assumes a perfect world in 
+# From centerline (road_peak), the truck will extend 3 (5?) cells on either side. The tires 
+# themselves are the 4th (6th?) cell from road_peak. This model assumes a perfect world in 
 # which the truck drives symmetrically about the road's crown. For this model, I assumed that
-# the truck is 1.8m wide, with the tires being 1.35m apart.
+# the truck is 1.8m (2.7?) wide, with the tires being 1.35m (2.25m?) apart.
 
-tire_1 = 20 #x-position of one tire
-tire_2 = 28 #x-position of other tire
+tire_1 = 18 #x-position of one tire
+tire_2 = 30 #x-position of other tire
 
-out_1 = [19,21] #x-positions of the side cells of the first tire
-out_2 = [27,29] #x-positions of the side cells of the other tire
+out_1 = [17,19] #x-positions of the side cells of the first tire
+out_2 = [29,31] #x-positions of the side cells of the other tire
 
 back_tire_1 = [] #initialize the back of tire recovery for first tire
 back_tire_2 = [] #initialize the back of tire recovery for other tire
@@ -154,9 +151,11 @@ tire_tracks = np.array([tire_track_1, tire_track_2, out_tire_1[:,0], \
 model_end = 10 #days
 
 tpe = TruckPassErosion(mg) #initialize component
+center = 24 #center node
+half_width = 5 #how far each tire extends from center
 
 for i in range(0, model_end): #loop through model days
-    tpe.run_one_step(24,3)
+    tpe.run_one_step(center,half_width)
     print(tpe.truck_num) #this is just to ensure the truck_num was changing
 
 #%% Cross section plot
