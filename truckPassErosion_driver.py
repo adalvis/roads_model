@@ -25,29 +25,29 @@ np.set_printoptions(threshold=np.inf)
 
 #%% Where are the truck tires on the elevation map?
 
-# From centerline (road_peak), the truck will extend 3 (5?) cells on either side. The tires 
-# themselves are the 4th (6th?) cell from road_peak. This model assumes a perfect world in 
+# From centerline (road_peak), the truck will extend 4 nodes on either side. The tires 
+# themselves are the 3rd node from road_peak. This model assumes a perfect world in 
 # which the truck drives symmetrically about the road's crown. For this model, I assumed that
-# the truck is 1.8m (2.7?) wide, with the tires being 1.35m (2.25m?) apart.
+# the truck is 2.655m wide, with the tires being 1.475m apart.
 
-tire_1 = 18 #x-position of one tire
-tire_2 = 30 #x-position of other tire
+tire_1 = [16,17] #x-position of one tire
+tire_2 = [23,24] #x-position of other tire
 
-out_1 = [17,19] #x-positions of the side cells of the first tire
-out_2 = [29,31] #x-positions of the side cells of the other tire
+out_1 = [15,18] #x-positions of the side cells of the first tire
+out_2 = [22,25] #x-positions of the side cells of the other tire
 
 back_tire_1 = [] #initialize the back of tire recovery for first tire
 back_tire_2 = [] #initialize the back of tire recovery for other tire
 
 #%% Create erodible grid method
 def ErodibleGrid(nrows,ncols,spacing):    
-    mg = RasterModelGrid((nrows,ncols),spacing) #produces an 80m x 10.67m grid w/ cell size of 0.225m (approx. tire width)
+    mg = RasterModelGrid((nrows,ncols),spacing) #produces an 80m x 10.62m grid w/ cell size of 0.225m (approx. tire width)
     z = mg.add_zeros('topographic__elevation', at='node') #create the topographic__elevation field
     road_flag = mg.add_zeros('flag', at='node') #create a road_flag field
 
     mg.set_closed_boundaries_at_grid_edges(False, False, False, False) 
     
-    road_peak = 24 #peak crowning height occurs at this x-location
+    road_peak = 40 #peak crowning height occurs at this x-location
     up = 0.0067 #rise of slope from ditchline to crown
     down = 0.0067 #rise of slope from crown to fillslope
     
@@ -59,16 +59,22 @@ def ErodibleGrid(nrows,ncols,spacing):
             z[g*ncols + h] = elev #update elevation based on x & y locations
             road_flag[g*ncols+h] = flag #update road_flag based on x & y locations
 
-            if h == 0 or h == 4:
+            if h == 0 or h == 8:
                 elev = 0
                 flag = False
-            elif h == 1 or h == 3:
+            elif h == 1 or h == 7:
+                elev = -0.333375
+                flag = False
+            elif h == 2 or h == 6:
                 elev = -0.5715
                 flag = False
-            elif h == 2:
+            elif h == 3 or h == 5:
+                elev = -0.714375
+                flag = False
+            elif h == 4:
                 elev = -0.762
                 flag = False
-            elif h < road_peak and h > 3: #update latitudinal slopes based on location related to road_peak
+            elif h < road_peak and h > 7: #update latitudinal slopes based on location related to road_peak
                 elev += up
                 flag = True
             else:
@@ -86,7 +92,7 @@ def ErodibleGrid(nrows,ncols,spacing):
         for h in range(ncols): #loop through road width
             n[g*ncols + h] = roughness #update roughness values based on x & y locations
             
-            if h >= 0 and h <= 4: #ditchline Manning's n value is higher than OF
+            if h >= 0 and h <= 8: #ditchline Manning's n value is higher than OF
                 roughness = 0.1
             else:
                 roughness = 0.02
@@ -94,7 +100,12 @@ def ErodibleGrid(nrows,ncols,spacing):
     return(mg, z, road_flag, n)           
 
 #%% Run method to create grid; add new fields
-mg, z, road_flag, n = ErodibleGrid(355,44,0.225)
+mg, z, road_flag, n = ErodibleGrid(540,72,0.1475)
+noise_amplitude=0.001
+
+z[mg.core_nodes] = z[mg.core_nodes] + noise_amplitude * np.random.rand(
+    mg.number_of_core_nodes
+)
 
 #add absolute elevation fields that will update based on z updates
 mg.at_node['active__elev'] = z
@@ -102,9 +113,9 @@ mg.at_node['surfacing__elev'] = z - 0.0275
 mg.at_node['ballast__elev'] = z - 0.0275 - 0.23
 
 #add depth fields that will update in the component
-mg.at_node['active__depth'] = np.ones(355*44)*0.0275
-mg.at_node['surfacing__depth'] = np.ones(355*44)*0.23
-mg.at_node['ballast__depth'] = np.ones(355*44)*2.0
+mg.at_node['active__depth'] = np.ones(540*72)*0.0275
+mg.at_node['surfacing__depth'] = np.ones(540*72)*0.23
+mg.at_node['ballast__depth'] = np.ones(540*72)*2.0
 
 #%% Plot initial grid
 plt.figure(figsize = (3,6), layout='tight')
@@ -117,57 +128,90 @@ plt.tight_layout()
 plt.show()
 
 #%% Prep some variables for later
-xsec_pre = mg.at_node['topographic__elevation'][4400:4444].copy()
+xsec_pre = mg.at_node['topographic__elevation'][4392*2:4428*2].copy()
 mg_pre = mg.at_node['topographic__elevation'].copy()
 
 X = mg.node_x.reshape(mg.shape)
 Y = mg.node_y.reshape(mg.shape)
 Z = z.reshape(mg.shape)
 
-#%% Determine location of tire tracks---this will be superseded by a method in the component
-#get node IDs for the important nodes
-tire_track_1 = mg.nodes[:, tire_1]
-tire_track_2 = mg.nodes[:, tire_2]
-out_tire_1 = mg.nodes[:, out_1]
-out_tire_2 = mg.nodes[:, out_2]
+# #%% Determine location of tire tracks---this will be superseded by a method in the component
+# #get node IDs for the important nodes
+# tire_track_1 = mg.nodes[:, tire_1]
+# tire_track_2 = mg.nodes[:, tire_2]
+# out_tire_1 = mg.nodes[:, out_1]
+# out_tire_2 = mg.nodes[:, out_2]
 
-back_tire_1.append(mg.nodes[0, tire_1])
-back_tire_2.append(mg.nodes[0, tire_2])
+# back_tire_1.append(mg.nodes[0, tire_1])
+# back_tire_2.append(mg.nodes[0, tire_2])
 
-for k in range(0,354):
-    back_tire_1.append(mg.nodes[k+1, tire_1])
-    back_tire_2.append(mg.nodes[k+1, tire_2])
+# for k in range(0,296):
+#     back_tire_1.append(mg.nodes[k+1, tire_1])
+#     back_tire_2.append(mg.nodes[k+1, tire_2])
     
-back_tire_1_new = np.array(back_tire_1)    
-back_tire_2_new = np.array(back_tire_2)
+# back_tire_1_new = np.array(back_tire_1)    
+# back_tire_2_new = np.array(back_tire_2)
 
 
-tire_tracks = np.array([tire_track_1, tire_track_2, out_tire_1[:,0], \
-                        out_tire_1[:,1], out_tire_2[:,0], out_tire_2[:,1], \
-                        back_tire_1_new, back_tire_2_new])
+# tire_tracks = np.array([tire_track_1, tire_track_2, out_tire_1[:,0], \
+#                         out_tire_1[:,1], out_tire_2[:,0], out_tire_2[:,1], \
+#                         back_tire_1_new, back_tire_2_new])
 
 #%% Run the component
 #define how long to run the model
 model_end = 10 #days
 
 tpe = TruckPassErosion(mg) #initialize component
-center = 24 #center node
-half_width = 5 #how far each tire extends from center
+center = 40 #center node
+half_width = 7 #how far each tire extends from center
+
+import time
+
+start = time.time()
+knwv = KinwaveImplicitOverlandFlow(mg, runoff_rate=2, depth_exp=5/3) #Feed initial component a runoff rate of 2 mm/hr
+
+# Initialize model run information
+hydrograph_time = [0]
+discharge_at_outlet = [0]
+dt = 3600 #time step in seconds
+
+elapsed_time = 1 #Set an initial time to avoid any 0 errors
+model_run_time= 86400*10 #total model run time, in seconds; 36 hours
+storm_duration = 86400 #length of storm in seconds; 24 hours
 
 for i in range(0, model_end): #loop through model days
     tpe.run_one_step(center,half_width)
     print(tpe.truck_num) #this is just to ensure the truck_num was changing
+    print(tpe._hiding_frac)
+    # Run the model; note that this will take a bit of time!
+    # while elapsed_time <= i*86400:
+    #     if elapsed_time < storm_duration:
+    #         knwv.run_one_step(dt)
+    #     else:
+    #         knwv.runoff_rate = 1e-30 #Reset runoff_rate to be ~0; post-storm runoff
+    #         knwv.run_one_step(dt)
+
+    #     # q_at_outlet = mg.at_node['surface_water_inflow__discharge'][oid].item() #get discharge at the outlet
+
+    #     # hydrograph_time.append(elapsed_time/3600.)
+    #     # discharge_at_outlet.append(q_at_outlet)
+                            
+    #     elapsed_time += dt #increase model time
+
+end = time.time()
+print(f"Time taken to run the code was {end-start} seconds")
+
 
 #%% Cross section plot
-xsec_active = mg.at_node['active__elev'][4400:4444]
-xsec_surf =  mg.at_node['surfacing__elev'][4400:4444] 
-xsec_ball = mg.at_node['ballast__elev'][4400:4444]
+xsec_active = mg.at_node['active__elev'][4392*2:4428*2]
+xsec_surf =  mg.at_node['surfacing__elev'][4392*2:4428*2] 
+xsec_ball = mg.at_node['ballast__elev'][4392*2:4428*2]
 
 plt.figure(figsize=(8,3), layout='tight')
-plt.plot(X[44], xsec_pre, color='gray', linestyle='-.', label='Before')
-plt.plot(X[44], xsec_active, color ='black', linestyle='-', label = 'After - Active elevation')
-plt.plot(X[44], xsec_surf, color ='magenta', linestyle='-', label = 'After - Surfacing elevation')
-plt.plot(X[44], xsec_ball, color ='cyan', linestyle='-', label = 'After - Ballast elevation ')
+plt.plot(X[36], xsec_pre, color='gray', linestyle='-.', label='Before')
+plt.plot(X[36], xsec_active, color ='black', linestyle='-', label = 'After - Active elevation')
+plt.plot(X[36], xsec_surf, color ='magenta', linestyle='-', label = 'After - Surfacing elevation')
+plt.plot(X[36], xsec_ball, color ='cyan', linestyle='-', label = 'After - Ballast elevation ')
 plt.xlim(0,10)
 plt.xlabel('Road width (m)')
 plt.ylabel('Elevation (m)')
