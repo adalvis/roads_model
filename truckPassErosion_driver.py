@@ -181,8 +181,7 @@ storm_duration = 86400 #length of storm in seconds; 24 hours
 
 for i in range(0, model_end): #loop through model days
     tpe.run_one_step(center,half_width)
-    print(tpe.truck_num) #this is just to ensure the truck_num was changing
-    print(tpe._hiding_frac)
+    print(tpe._truck_num) #this is just to ensure the truck_num was changing
     # Run the model; note that this will take a bit of time!
     # while elapsed_time <= i*86400:
     #     if elapsed_time < storm_duration:
