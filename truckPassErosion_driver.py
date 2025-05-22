@@ -1,12 +1,13 @@
 """
 Purpose: Full road erosion model driver - testing
 Original creation: 03/12/2018
-Latest update: 05/16/2025
+Latest update: 05/22/2025
 Author: Amanda Alvis
 """
 #%% Load python packages and set some defaults
 
 import numpy as np
+import time
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -14,8 +15,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from landlab import RasterModelGrid 
 from landlab.io import native_landlab
 from landlab.components import TruckPassErosion
-from landlab.components import KinwaveImplicitOverlandFlow, FlowAccumulator, FastscapeEroder, \
-    DetachmentLtdErosion
+from landlab.components import KinwaveImplicitOverlandFlow, FlowAccumulator, FastscapeEroder
 from landlab.plot.imshow import imshow_grid
 from landlab.plot.drainage_plot import drainage_plot
 
@@ -24,8 +24,6 @@ mpl.rcParams['font.weight'] = 'medium'
 mpl.rcParams['axes.labelweight'] = 'normal'
 
 np.set_printoptions(threshold=np.inf)
-#np.set_printoptions(threshold=1000)
-
 
 #%% Create erodible grid method
 def ErodibleGrid(nrows, ncols, spacing, full_tire):
@@ -128,6 +126,8 @@ mg, z, road_flag, n = ErodibleGrid(540,72,0.1475,False) #half tire width
 # mg, z, road_flag, n = ErodibleGrid(270,36,0.295,True) #full tire width
 noise_amplitude=0.007
 
+# np.random.seed(0)
+
 z[mg.core_nodes] = z[mg.core_nodes] + noise_amplitude * np.random.rand(
     mg.number_of_core_nodes
 )
@@ -183,7 +183,7 @@ Z = z.reshape(mg.shape)
 
 #%% Run the component
 #half tire width
-center = 40
+center = 39
 half_width = 7 
 full_tire = False
 
@@ -195,44 +195,139 @@ full_tire = False
 tpe = TruckPassErosion(mg, center, half_width, full_tire) #initialize component
 fa = FlowAccumulator(mg,
                      surface='topographic__elevation',
-                     runoff_rate=1.66667e-6, #6 mm/hr converted to m/s
+                     runoff_rate=1.38889e-6, #5 mm/hr converted to m/s
                      flow_director='D8',
                      )
 
 # # Choose parameter values for the stream power (SP) equation
 # # and instantiate an object of the FastscapeEroder
 K_sp=0.0275 # erodibility in SP eqtn; this is a guess
-sp = FastscapeEroder(mg, K_sp=K_sp)
+sp = FastscapeEroder(mg, 
+                     K_sp=K_sp,
+                     threshold_sp=0.0,
+                     discharge_field='surface_water__discharge',
+                     erode_flooded_nodes=True)
 
-dt=1
 #define how long to run the model
-model_end = int(10) #days
+model_end = int(90) #days
 for i in range(0, model_end): #loop through model days
     tpe.run_one_step()
-    fa.accumulate_flow()
-    sp.run_one_step(dt)
+    print(tpe._truck_num)
 
-    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
-    plt.xlabel('Road width (m)')
-    plt.ylabel('Road length (m)')
-    imshow_grid(mg,'surface_water__discharge', plot_name='Steady state Q', 
-                var_name='Q', var_units='$m^3/s$', grid_units=('m','m'), 
-                cmap='Blues', vmin=0, vmax=0.00004)
+    p_storm = 0.25
 
-    # Plot the sample nodes.
-    plt.plot(mg.node_x[ditch_id], mg.node_y[ditch_id], 's', zorder=10, ms=3.5, \
-        clip_on=False, color='#44FFD1', markeredgecolor='k', label='Ditch')
-    plt.plot(mg.node_x[rut_left_id], mg.node_y[rut_left_id], '^', zorder=10, ms=3.5, \
-        clip_on=False, color='#6153CC', markeredgecolor='k', label='Left rut')
-    plt.plot(mg.node_x[rut_right_id], mg.node_y[rut_right_id], 'o', zorder=10, ms=3.75, \
-        clip_on=False, color='#A60067', markeredgecolor='k',label='Right rut')
+    if np.random.uniform() <= p_storm:
+        intensity = np.random.exponential(scale=5)
+        print(intensity)
+        dt = np.random.exponential(scale=1/6)
+        print(dt)
 
-    plt.tight_layout()
+        mg.at_node['water__unit_flux_in'] = np.ones(540*72)*intensity*2.77778e-7
+        fa.accumulate_flow()
+        sp.run_one_step(dt)
 
-    _ = ax.legend(loc='center right', bbox_to_anchor=(1.35,0.5), \
-        bbox_transform=plt.gcf().transFigure)
-    plt.show()
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+        im = imshow_grid(mg,'surface_water__discharge', var_name='Q', plot_name='Steady state Q, t = %i days' %i,
+                    var_units='$m^3/s$', grid_units=('m','m'), 
+                    cmap='Blues', vmin=0, vmax=5e-6)
+        # plt.title('Steady state Q, t = %i days' %i, y=1.05)
 
+        # Plot the sample nodes.
+        plt.plot(mg.node_x[ditch_id], mg.node_y[ditch_id], 's', zorder=10, ms=3.5, \
+            clip_on=False, color='#44FFD1', markeredgecolor='k', label='Ditch')
+        plt.plot(mg.node_x[rut_left_id], mg.node_y[rut_left_id], '^', zorder=10, ms=3.5, \
+            clip_on=False, color='#6153CC', markeredgecolor='k', label='Left rut')
+        plt.plot(mg.node_x[rut_right_id], mg.node_y[rut_right_id], 'o', zorder=10, ms=3.75, \
+            clip_on=False, color='#A60067', markeredgecolor='k',label='Right rut')
+
+        plt.tight_layout()
+        _ = ax.legend(loc='center right', bbox_to_anchor=(1.35,0.5), \
+            bbox_transform=plt.gcf().transFigure)
+        plt.show()
+
+#%%
+# 
+# Initialize model run information
+# hydrograph_time = [0]
+# discharge_ditch = [0]
+# discharge_rut_left = [0]
+# discharge_rut_right = [0]
+
+# dt_knwv = 3600 #time step in seconds
+# run_time_slices = range(0,40)
+# elapsed_time = 1 #Set an initial time to avoid any 0 errors
+# storm_duration = 86400 #length of storm in seconds; 24 hours
+# # model_run_time = 3601        
+# # Run the model; note that this will take a bit of time!
+#     while elapsed_time <= storm_duration*i:
+#         if elapsed_time < storm_duration:
+#             knwv.run_one_step(dt_knwv)
+#             dle.run_one_step(dt)
+#         else:
+#             knwv.runoff_rate = 1e-30 #Reset runoff_rate to be ~0; post-storm runoff
+#             knwv.run_one_step(dt_knwv)
+#             dle.run_one_step(dt)
+
+#         for t in run_time_slices:
+#             if elapsed_time == t*86400+1:
+#                 time_model = t 
+#                 imshow_grid(mg, 'surface_water_inflow__discharge', plot_name='Discharge, t = %i days' % time_model, 
+#                     var_name='Q', var_units='$m^3/s$', grid_units=('m','m'), vmin=0, vmax=5e-6,
+#                     cmap='Blues')
+#                 # Plot the sample nodes.
+#                 plt.plot(mg.node_x[ditch_id], mg.node_y[ditch_id], 's', zorder=10, ms=3.5, \
+#                     clip_on=False, color='#44FFD1', markeredgecolor='k', label='Ditch')
+#                 plt.plot(mg.node_x[rut_left_id], mg.node_y[rut_left_id], '^', zorder=10, ms=3.5, \
+#                     clip_on=False, color='#6153CC', markeredgecolor='k', label='Left rut')
+#                 plt.plot(mg.node_x[rut_right_id], mg.node_y[rut_right_id], 'o', zorder=10, ms=3.75, \
+#                     clip_on=False, color='#A60067', markeredgecolor='k',label='Right rut')
+
+#                 _ = ax.legend(loc='center right', bbox_to_anchor=(1.25,0.5), \
+#                     bbox_transform=plt.gcf().transFigure)
+#                 plt.show()
+#                 fig, ax = plt.subplots(figsize=(15,10))
+#                 drainage_plot(mg)
+#                 plt.axis([0,10.5, 0, 0.5])
+#                 plt.tight_layout()
+#                 plt.show()
+
+#         q_ditch = mg.at_node['surface_water_inflow__discharge'][ditch_id].item() 
+#         q_rut_left = mg.at_node['surface_water_inflow__discharge'][rut_left_id].item() 
+#         q_rut_right = mg.at_node['surface_water_inflow__discharge'][rut_right_id].item() 
+
+#         hydrograph_time.append(elapsed_time/3600.)
+
+#         discharge_ditch.append(q_ditch)
+#         discharge_rut_left.append(q_rut_left)
+#         discharge_rut_right.append(q_rut_right) 
+                            
+#         elapsed_time += dt_knwv #increase model time
+#         print(elapsed_time)      
+
+#     end = time.time()
+#     print(f"Time taken to run the code was {end-start} seconds")
+
+#%%
+# #Plot the hydrograph
+# ax = plt.gca()
+# ax.tick_params(axis='both', which='both', direction='in', bottom='on', 
+#                 left='on', top='on', right='on')
+# ax.minorticks_on()
+
+# ax.plot(hydrograph_time, discharge_ditch, '-', color='#44FFD1', markeredgecolor='k', label='Ditch')
+# ax.plot(hydrograph_time, discharge_rut_left, '-', color='#6153CC', markeredgecolor='k', label='Left rut')
+# ax.plot(hydrograph_time, discharge_rut_right, '-', color='#A60067', markeredgecolor='k',label='Right rut')
+# ax.set(xlabel='Time (hr)', ylabel='Q ($m^3/s$)',
+#         title='Hydrograph')
+# ax.annotate('Max ditch Q = ' + str(np.max(np.round(discharge_ditch,5))) + ' $m^3/s$',(0.25,0.000525))
+# ax.annotate('Max left rut Q = ' + str(np.max(np.round(discharge_rut_left,5))) + ' $m^3/s$',(0.175,0.000185))
+# ax.annotate('Max right rut Q = ' + str(np.max(np.round(discharge_rut_right,5))) + ' $m^3/s$',(0.175,0.00016))
+# _=ax.legend()
+# plt.show()
+
+#%%
 #save rutted grid
 # native_landlab.save_grid(mg, 'rutted_grid.grid', clobber=True)
 
@@ -241,7 +336,7 @@ for i in range(0, model_end): #loop through model days
 # use the partition method 'square_root_of_slope' to match instantiation of FlowAccumulator in Kinwave component
 # fa = FlowAccumulator(mg,
 #                      surface='topographic__elevation',
-#                      flow_director='D8', #multiple flow directions
+#                      flow_director='MFD', #multiple flow directions
 #                      runoff_rate=1.66667e-6, #6 mm/hr converted to m/s
 #                      partition_method='square_root_of_slope')
 
