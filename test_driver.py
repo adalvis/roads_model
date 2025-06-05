@@ -1,7 +1,7 @@
 """
 Purpose: Full road erosion model driver - testing
 Original creation: 03/12/2018
-Latest update: 05/22/2025
+Latest update: 06/05/2025
 Author: Amanda Alvis
 """
 #%% Load python packages and set some defaults
@@ -132,15 +132,16 @@ z[mg.core_nodes] = z[mg.core_nodes] + noise_amplitude * np.random.rand(
     mg.number_of_core_nodes
 )
 
-#add absolute elevation fields that will update based on z updates
-mg.at_node['active__elev'] = z
-mg.at_node['surfacing__elev'] = z - 0.0275
-mg.at_node['ballast__elev'] = z - 0.0275 - 0.23
-
 #add depth fields that will update in the component
-mg.at_node['active__depth'] = np.ones(540*72)*0.0275
+mg.at_node['active__depth'] = np.ones(540*72)*0.02
 mg.at_node['surfacing__depth'] = np.ones(540*72)*0.23
 mg.at_node['ballast__depth'] = np.ones(540*72)*2.0
+
+#add absolute elevation fields that will update based on z updates
+mg.at_node['active__elev'] = z
+mg.at_node['surfacing__elev'] = z - mg.at_node['active__depth']
+mg.at_node['ballast__elev'] = z - mg.at_node['active__depth']\
+     - mg.at_node['surfacing__depth']
 
 #for full tire width
 # mg.at_node['active__depth'] = np.ones(270*36)*0.0275
@@ -160,20 +161,21 @@ plt.xlabel('Road width (m)')
 plt.ylabel('Road length (m)')
 
 # Plot the sample nodes.
-plt.plot(mg.node_x[ditch_id], mg.node_y[ditch_id], 's', zorder=10, ms=3.5, \
-    clip_on=False, color='#44FFD1', markeredgecolor='k', label='Ditch')
-plt.plot(mg.node_x[rut_left_id], mg.node_y[rut_left_id], '^', zorder=10, ms=3.5, \
-    clip_on=False, color='#6153CC', markeredgecolor='k', label='Left rut')
-plt.plot(mg.node_x[rut_right_id], mg.node_y[rut_right_id], 'o', zorder=10, ms=3.75, \
-    clip_on=False, color='#A60067', markeredgecolor='k',label='Right rut')
+# plt.plot(mg.node_x[ditch_id], mg.node_y[ditch_id], 's', zorder=10, ms=3.5, \
+#     clip_on=False, color='#44FFD1', markeredgecolor='k', label='Ditch')
+# plt.plot(mg.node_x[rut_left_id], mg.node_y[rut_left_id], '^', zorder=10, ms=3.5, \
+#     clip_on=False, color='#6153CC', markeredgecolor='k', label='Left rut')
+# plt.plot(mg.node_x[rut_right_id], mg.node_y[rut_right_id], 'o', zorder=10, ms=3.75, \
+#     clip_on=False, color='#A60067', markeredgecolor='k',label='Right rut')
 
-_ = ax.legend(loc='center right', bbox_to_anchor=(1.25,0.5), \
-    bbox_transform=plt.gcf().transFigure)
+# _ = ax.legend(loc='center right', bbox_to_anchor=(1.25,0.5), \
+#     bbox_transform=plt.gcf().transFigure)
 plt.tight_layout()
 plt.show()
 
 #%% Prep some variables for later
 xsec_pre = mg.at_node['topographic__elevation'][4392*2:4428*2].copy() #half tire width
+xsec_surf_pre = mg.at_node['surfacing__elev'][4392*2:4428*2].copy()
 # xsec_pre = mg.at_node['topographic__elevation'][2196:2232].copy() #full tire width
 mg_pre = mg.at_node['topographic__elevation'].copy()
 
@@ -192,7 +194,8 @@ full_tire = False
 # half_width = 4
 # full_tire=True
 
-tpe = TruckPassErosion(mg, center, half_width, full_tire) #initialize component
+tpe = TruckPassErosion(mg, center, half_width, full_tire, \
+    scat_loss=0.00008, scat_out=0.000032, scat_back=0.000016) #initialize component
 fa = FlowAccumulator(mg,
                      surface='topographic__elevation',
                      runoff_rate=1.38889e-6, #5 mm/hr converted to m/s
@@ -201,51 +204,180 @@ fa = FlowAccumulator(mg,
 
 # # Choose parameter values for the stream power (SP) equation
 # # and instantiate an object of the FastscapeEroder
-K_sp=0.0275 # erodibility in SP eqtn; this is a guess
+K_sp=0.275# erodibility in SP eqtn; this is a guess
 sp = FastscapeEroder(mg, 
                      K_sp=K_sp,
                      threshold_sp=0.0,
                      discharge_field='surface_water__discharge',
                      erode_flooded_nodes=True)
 
+
+mask = road_flag
+
+z_limit = mg.at_node['topographic__elevation'] - mg.at_node['active__depth']
+intensity_arr=[]
+dt_arr = []
+dz_arr_masked=[]
+dz_arr_cum_masked = []
+sa_arr=[]
+ss_arr=[]
+sb_arr=[]
+
+z_ini_cum = mg.at_node['topographic__elevation'].copy()
+
 #define how long to run the model
-model_end = int(90) #days
+model_end = int(365) #days
 for i in range(0, model_end): #loop through model days
+    z_ini = mg.at_node['topographic__elevation'].copy()
     tpe.run_one_step()
     print(tpe._truck_num)
-
     p_storm = 0.25
+    
+    chance = np.random.uniform()
 
-    if np.random.uniform() <= p_storm:
-        intensity = np.random.exponential(scale=5)
-        print(intensity)
+    if chance > p_storm:
+        intensity_arr.append(0)
+        dt_arr.append(0)
+
+        dz = z-z_ini
+        dz_masked = z[mask]-z_ini[mask]
+        dz_arr_masked.append(sum(dz_masked))
+
+        dz_cum = z-z_ini_cum
+        dz_cum_masked = z[mask]-z_ini_cum[mask]
+        dz_arr_cum_masked.append(sum(dz_cum_masked))
+
+        sa = mg.at_node['active__elev'][tpe._tire_tracks[0:1]].mean() -\
+            mg.at_node['surfacing__elev'][tpe._tire_tracks[0:1]].mean()
+        sa_arr.append(sa)
+        ss = mg.at_node['surfacing__depth'][tpe._tire_tracks[0:1]].mean() #-\
+            # mg.at_node['ballast__elev'][tpe._tire_tracks[0:1]].mean()
+        ss_arr.append(ss)
+        sb = mg.at_node['ballast__depth'][tpe._tire_tracks[0:1]].mean() #-\
+            # mg.at_node['bottom__elev'][tpe._tire_tracks[0:1]].mean()
+        sb_arr.append(sb)
+
+    elif chance <= p_storm:
         dt = np.random.exponential(scale=1/6)
         print(dt)
+        dt_arr.append(dt)
+        intensity = np.random.exponential(scale=5)
+        print(intensity)
+        intensity_arr.append(intensity)
 
         mg.at_node['water__unit_flux_in'] = np.ones(540*72)*intensity*2.77778e-7
         fa.accumulate_flow()
         sp.run_one_step(dt)
+        if any(z[tpe._tire_tracks[0]] <= z_limit[tpe._tire_tracks[0]]) or\
+            any(z[tpe._tire_tracks[1]] <= z_limit[tpe._tire_tracks[1]]):
+            z[tpe._tire_tracks[0:1]] = z_limit[tpe._tire_tracks[0:1]]
+        
+        dz = z-z_ini
+        dz_masked = z[mask]-z_ini[mask]
+        dz_arr_masked.append(sum(dz_masked))
 
+        dz_cum = z-z_ini_cum
+        dz_cum_masked = z[mask]-z_ini_cum[mask]
+        dz_arr_cum_masked.append(sum(dz_cum_masked))
+
+        sa = mg.at_node['active__elev'][tpe._tire_tracks[0:1]].mean() -\
+            mg.at_node['surfacing__elev'][tpe._tire_tracks[0:1]].mean()
+        sa_arr.append(sa)
+        ss = mg.at_node['surfacing__depth'][tpe._tire_tracks[0:1]].mean() #-\
+            # mg.at_node['ballast__elev'][tpe._tire_tracks[0:1]].mean()
+        ss_arr.append(ss)
+        sb = mg.at_node['ballast__depth'][tpe._tire_tracks[0:1]].mean() #-\
+            # mg.at_node['bottom__elev'][tpe._tire_tracks[0:1]].mean()
+        sb_arr.append(sb)
+        
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
+        im = imshow_grid(mg,'surface_water__discharge', var_name='Q', 
+                     plot_name='Steady state Q, t = %i days' %i,
+                     var_units='$m^3/s$', grid_units=('m','m'), 
+                     cmap='Blues', vmin=0, vmax=5e-6, shrink=0.9)
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+        plt.tight_layout()
+        plt.savefig('output/Q_%i_days.png' %i)
+        plt.show()
+
+        dz[mask==0] = 0
+        mg.add_field('dz', dz, at='node', units='m', clobber=True)
         fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
         plt.xlabel('Road width (m)')
         plt.ylabel('Road length (m)')
-        im = imshow_grid(mg,'surface_water__discharge', var_name='Q', plot_name='Steady state Q, t = %i days' %i,
-                    var_units='$m^3/s$', grid_units=('m','m'), 
-                    cmap='Blues', vmin=0, vmax=5e-6)
-        # plt.title('Steady state Q, t = %i days' %i, y=1.05)
-
-        # Plot the sample nodes.
-        plt.plot(mg.node_x[ditch_id], mg.node_y[ditch_id], 's', zorder=10, ms=3.5, \
-            clip_on=False, color='#44FFD1', markeredgecolor='k', label='Ditch')
-        plt.plot(mg.node_x[rut_left_id], mg.node_y[rut_left_id], '^', zorder=10, ms=3.5, \
-            clip_on=False, color='#6153CC', markeredgecolor='k', label='Left rut')
-        plt.plot(mg.node_x[rut_right_id], mg.node_y[rut_right_id], 'o', zorder=10, ms=3.75, \
-            clip_on=False, color='#A60067', markeredgecolor='k',label='Right rut')
-
+        im = imshow_grid(mg,'dz', var_name='dz', var_units='m', 
+                     plot_name='Elevation change, t = %i days' %i,
+                     grid_units=('m','m'), cmap='RdBu', vmin=-1e-6, 
+                     vmax=1e-6, shrink=0.9)
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
         plt.tight_layout()
-        _ = ax.legend(loc='center right', bbox_to_anchor=(1.35,0.5), \
-            bbox_transform=plt.gcf().transFigure)
+        # plt.savefig('output/dz_%i_days.png' %i)
         plt.show()
+
+        dz_cum[mask==0] = 0
+        mg.add_field('dz_cum', dz_cum, at='node', units='m', clobber=True)
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+        im = imshow_grid(mg,'dz_cum', var_name='Cumulative dz', var_units='m', 
+                     plot_name='Elevation change, t = %i days' %i,
+                     grid_units=('m','m'), cmap='RdBu', vmin=-0.001, 
+                     vmax=0.001, shrink=0.9)
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+        plt.tight_layout()
+        plt.savefig('output/dz_cum_%i_days.png' %i)
+        plt.show()
+#%%
+plt.bar(range(0,model_end), np.multiply(intensity_arr,np.multiply(dt_arr,24)))
+plt.xlabel('Day')
+plt.ylabel('Rainfall [mm]')
+plt.xlim(0,model_end)
+plt.show()
+
+plt.plot(range(0,model_end), intensity_arr)
+plt.xlabel('Day')
+plt.ylabel('Rainfall intensity [mm/hr]')
+plt.xlim(0,model_end)
+plt.show()
+#%%
+plt.plot(range(0,model_end), dz_arr_masked)
+plt.plot(range(0,model_end), np.zeros(len(range(0,model_end))), '--', color='gray')
+plt.xlabel('Day')
+plt.ylabel('Total elevation change between time steps [m]')
+plt.xlim(0,model_end)
+
+#%%
+plt.plot(range(0,model_end), dz_arr_cum_masked)
+plt.plot(range(0,model_end), np.zeros(len(range(0,model_end))), '--', color='gray')
+plt.xlabel('Day')
+plt.ylabel('Cumulative elevation change [m]')
+plt.xlim(0,model_end)
+
+
+#%%
+plt.plot(range(0,model_end), sa_arr)
+plt.xlabel('Day')
+plt.ylabel('Average active depth [m]')
+plt.xlim(0,model_end)
+plt.ylim(0,0.02)
+plt.show()
+
+plt.plot(range(0,model_end), ss_arr)
+plt.xlabel('Day')
+plt.ylabel('Average surfacing depth [m]')
+plt.xlim(0,model_end)
+# plt.ylim(0.229999999999999,0.23)
+plt.show()
+
+plt.plot(range(0,model_end), sb_arr)
+plt.xlabel('Day')
+plt.ylabel('Average ballast depth [m]')
+plt.xlim(0,model_end)
+# plt.ylim(1.9999999999999999999,2.0)
+plt.show()
 
 #%%
 # 
@@ -515,16 +647,16 @@ imshow_grid(mg, z, plot_name='Synthetic road with ruts', var_name='Elevation', v
 plt.xlabel('Road width (m)')
 plt.ylabel('Road length (m)')
 
-# Plot the sample nodes.
-plt.plot(mg.node_x[ditch_id], mg.node_y[ditch_id], 's', zorder=10, ms=3.5, \
-    clip_on=False, color='#44FFD1', markeredgecolor='k', label='Ditch')
-plt.plot(mg.node_x[rut_left_id], mg.node_y[rut_left_id], '^', zorder=10, ms=3.5, \
-    clip_on=False, color='#6153CC', markeredgecolor='k', label='Left rut')
-plt.plot(mg.node_x[rut_right_id], mg.node_y[rut_right_id], 'o', zorder=10, ms=3.75, \
-    clip_on=False, color='#A60067', markeredgecolor='k',label='Right rut')
+# # Plot the sample nodes.
+# plt.plot(mg.node_x[ditch_id], mg.node_y[ditch_id], 's', zorder=10, ms=3.5, \
+#     clip_on=False, color='#44FFD1', markeredgecolor='k', label='Ditch')
+# plt.plot(mg.node_x[rut_left_id], mg.node_y[rut_left_id], '^', zorder=10, ms=3.5, \
+#     clip_on=False, color='#6153CC', markeredgecolor='k', label='Left rut')
+# plt.plot(mg.node_x[rut_right_id], mg.node_y[rut_right_id], 'o', zorder=10, ms=3.75, \
+#     clip_on=False, color='#A60067', markeredgecolor='k',label='Right rut')
 
-_ = ax.legend(loc='center right', bbox_to_anchor=(1.25,0.5), \
-    bbox_transform=plt.gcf().transFigure)
+# _ = ax.legend(loc='center right', bbox_to_anchor=(1.25,0.5), \
+#     bbox_transform=plt.gcf().transFigure)
 plt.tight_layout()
 plt.show()
 
