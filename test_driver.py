@@ -195,7 +195,7 @@ full_tire = False
 # full_tire=True
 
 tpe = TruckPassErosion(mg, center, half_width, full_tire, \
-    scat_loss=0.00008, scat_out=0.000032, scat_back=0.000016) #initialize component
+    scat_loss=0.00008, scat_out=0.00004) #initialize component
 fa = FlowAccumulator(mg,
                      surface='topographic__elevation',
                      runoff_rate=1.38889e-6, #5 mm/hr converted to m/s
@@ -226,7 +226,7 @@ sb_arr=[]
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
 
 #define how long to run the model
-model_end = int(365) #days
+model_end = int(50) #days
 for i in range(0, model_end): #loop through model days
     z_ini = mg.at_node['topographic__elevation'].copy()
     tpe.run_one_step()
@@ -267,10 +267,10 @@ for i in range(0, model_end): #loop through model days
 
         mg.at_node['water__unit_flux_in'] = np.ones(540*72)*intensity*2.77778e-7
         fa.accumulate_flow()
-        sp.run_one_step(dt)
-        if any(z[tpe._tire_tracks[0]] <= z_limit[tpe._tire_tracks[0]]) or\
-            any(z[tpe._tire_tracks[1]] <= z_limit[tpe._tire_tracks[1]]):
-            z[tpe._tire_tracks[0:1]] = z_limit[tpe._tire_tracks[0:1]]
+        # sp.run_one_step(dt)
+        # if any(z[tpe._tire_tracks[0]] <= z_limit[tpe._tire_tracks[0]]) or\
+        #     any(z[tpe._tire_tracks[1]] <= z_limit[tpe._tire_tracks[1]]):
+        #     z[tpe._tire_tracks[0:1]] = z_limit[tpe._tire_tracks[0:1]]
         
         dz = z-z_ini
         dz_masked = z[mask]-z_ini[mask]
@@ -298,7 +298,7 @@ for i in range(0, model_end): #loop through model days
         plt.xlabel('Road width (m)')
         plt.ylabel('Road length (m)')
         plt.tight_layout()
-        plt.savefig('output/Q_%i_days.png' %i)
+        # plt.savefig('output/Q_%i_days.png' %i)
         plt.show()
 
         dz[mask==0] = 0
@@ -328,7 +328,7 @@ for i in range(0, model_end): #loop through model days
         plt.xlabel('Road width (m)')
         plt.ylabel('Road length (m)')
         plt.tight_layout()
-        plt.savefig('output/dz_cum_%i_days.png' %i)
+        # plt.savefig('output/dz_cum_%i_days.png' %i)
         plt.show()
 #%%
 plt.bar(range(0,model_end), np.multiply(intensity_arr,np.multiply(dt_arr,24)))
