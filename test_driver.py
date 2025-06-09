@@ -124,7 +124,7 @@ def ErodibleGrid(nrows, ncols, spacing, full_tire):
 #%% Run method to create grid; add new fields
 mg, z, road_flag, n = ErodibleGrid(540,72,0.1475,False) #half tire width
 # mg, z, road_flag, n = ErodibleGrid(270,36,0.295,True) #full tire width
-noise_amplitude=0.007
+noise_amplitude=0.005
 
 # np.random.seed(0)
 
@@ -195,7 +195,7 @@ full_tire = False
 # full_tire=True
 
 tpe = TruckPassErosion(mg, center, half_width, full_tire, \
-    scat_loss=0.00008, scat_out=0.00004) #initialize component
+    scat_loss=8e-5) #initialize component
 fa = FlowAccumulator(mg,
                      surface='topographic__elevation',
                      runoff_rate=1.38889e-6, #5 mm/hr converted to m/s
@@ -204,7 +204,7 @@ fa = FlowAccumulator(mg,
 
 # # Choose parameter values for the stream power (SP) equation
 # # and instantiate an object of the FastscapeEroder
-K_sp=0.275# erodibility in SP eqtn; this is a guess
+K_sp=0.011# erodibility in SP eqtn; this is a guess
 sp = FastscapeEroder(mg, 
                      K_sp=K_sp,
                      threshold_sp=0.0,
@@ -226,7 +226,7 @@ sb_arr=[]
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
 
 #define how long to run the model
-model_end = int(50) #days
+model_end = int(365) #days
 for i in range(0, model_end): #loop through model days
     z_ini = mg.at_node['topographic__elevation'].copy()
     tpe.run_one_step()
@@ -247,8 +247,8 @@ for i in range(0, model_end): #loop through model days
         dz_cum_masked = z[mask]-z_ini_cum[mask]
         dz_arr_cum_masked.append(sum(dz_cum_masked))
 
-        sa = mg.at_node['active__elev'][tpe._tire_tracks[0:1]].mean() -\
-            mg.at_node['surfacing__elev'][tpe._tire_tracks[0:1]].mean()
+        sa = mg.at_node['active__depth'][tpe._tire_tracks[0:5]].mean() #-\
+            # mg.at_node['surfacing__elev'][tpe._tire_tracks[0:1]].mean()
         sa_arr.append(sa)
         ss = mg.at_node['surfacing__depth'][tpe._tire_tracks[0:1]].mean() #-\
             # mg.at_node['ballast__elev'][tpe._tire_tracks[0:1]].mean()
@@ -267,10 +267,10 @@ for i in range(0, model_end): #loop through model days
 
         mg.at_node['water__unit_flux_in'] = np.ones(540*72)*intensity*2.77778e-7
         fa.accumulate_flow()
-        # sp.run_one_step(dt)
-        # if any(z[tpe._tire_tracks[0]] <= z_limit[tpe._tire_tracks[0]]) or\
-        #     any(z[tpe._tire_tracks[1]] <= z_limit[tpe._tire_tracks[1]]):
-        #     z[tpe._tire_tracks[0:1]] = z_limit[tpe._tire_tracks[0:1]]
+        sp.run_one_step(dt)
+        if any(z[tpe._tire_tracks[0]] <= z_limit[tpe._tire_tracks[0]]) or\
+            any(z[tpe._tire_tracks[1]] <= z_limit[tpe._tire_tracks[1]]):
+            z[tpe._tire_tracks[0:1]] = z_limit[tpe._tire_tracks[0:1]]
         
         dz = z-z_ini
         dz_masked = z[mask]-z_ini[mask]
@@ -280,8 +280,8 @@ for i in range(0, model_end): #loop through model days
         dz_cum_masked = z[mask]-z_ini_cum[mask]
         dz_arr_cum_masked.append(sum(dz_cum_masked))
 
-        sa = mg.at_node['active__elev'][tpe._tire_tracks[0:1]].mean() -\
-            mg.at_node['surfacing__elev'][tpe._tire_tracks[0:1]].mean()
+        sa = mg.at_node['active__depth'][tpe._tire_tracks[0:5]].mean() #-\
+            # mg.at_node['surfacing__elev'][tpe._tire_tracks[0:1]].mean()
         sa_arr.append(sa)
         ss = mg.at_node['surfacing__depth'][tpe._tire_tracks[0:1]].mean() #-\
             # mg.at_node['ballast__elev'][tpe._tire_tracks[0:1]].mean()
@@ -348,6 +348,7 @@ plt.plot(range(0,model_end), np.zeros(len(range(0,model_end))), '--', color='gra
 plt.xlabel('Day')
 plt.ylabel('Total elevation change between time steps [m]')
 plt.xlim(0,model_end)
+plt.ylim(-0.25,0.25)
 
 #%%
 plt.plot(range(0,model_end), dz_arr_cum_masked)
@@ -355,6 +356,7 @@ plt.plot(range(0,model_end), np.zeros(len(range(0,model_end))), '--', color='gra
 plt.xlabel('Day')
 plt.ylabel('Cumulative elevation change [m]')
 plt.xlim(0,model_end)
+plt.ylim(-0.25,0.25)
 
 
 #%%
@@ -362,21 +364,21 @@ plt.plot(range(0,model_end), sa_arr)
 plt.xlabel('Day')
 plt.ylabel('Average active depth [m]')
 plt.xlim(0,model_end)
-plt.ylim(0,0.02)
+plt.ylim(0.015,0.02)
 plt.show()
 
 plt.plot(range(0,model_end), ss_arr)
 plt.xlabel('Day')
 plt.ylabel('Average surfacing depth [m]')
 plt.xlim(0,model_end)
-# plt.ylim(0.229999999999999,0.23)
+plt.ylim(0.22,0.23)
 plt.show()
 
 plt.plot(range(0,model_end), sb_arr)
 plt.xlabel('Day')
 plt.ylabel('Average ballast depth [m]')
 plt.xlim(0,model_end)
-# plt.ylim(1.9999999999999999999,2.0)
+plt.ylim(1.99,2.0)
 plt.show()
 
 #%%
