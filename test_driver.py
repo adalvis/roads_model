@@ -124,7 +124,7 @@ def ErodibleGrid(nrows, ncols, spacing, full_tire):
 #%% Run method to create grid; add new fields
 mg, z, road_flag, n = ErodibleGrid(540,72,0.1475,False) #half tire width
 # mg, z, road_flag, n = ErodibleGrid(270,36,0.295,True) #full tire width
-noise_amplitude=0.01
+noise_amplitude=0.007
 
 # np.random.seed(0)
 
@@ -201,7 +201,7 @@ fa = FlowAccumulator(mg,
 
 # # Choose parameter values for the stream power (SP) equation
 # # and instantiate an object of the FastscapeEroder
-K_sp=0.001# erodibility in SP eqtn; this is a guess
+K_sp=0.275# erodibility in SP eqtn; this is a guess
 sp = FastscapeEroder(mg, 
                      K_sp=K_sp,
                      threshold_sp=0.0,
@@ -224,7 +224,7 @@ tracks=[]
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
 
 #define how long to run the model
-model_end = int(90) #days
+model_end = int(365) #days
 for i in range(0, model_end): #loop through model days
     z_ini = mg.at_node['topographic__elevation'].copy()
     tpe.run_one_step()
@@ -310,8 +310,8 @@ for i in range(0, model_end): #loop through model days
         # plt.savefig('output/dz_cum_%i_days.png' %i)
         plt.show()
 
-    sa = mg.at_node['topographic__elevation'].mean()\
-            - mg.at_node['surfacing__elev'].mean() #active depth change?
+    sa = mg.at_node['topographic__elevation'][tracks[i][0:6]].mean()\
+            - mg.at_node['surfacing__elev'][tracks[i][0:6]].mean() #active depth change?
     sa_arr.append(sa)
     ss = mg.at_node['surfacing__depth'][tracks[i][0:2]].mean() #-\
     ss_arr.append(ss)
@@ -343,7 +343,15 @@ plt.plot(range(0,model_end), np.zeros(len(range(0,model_end))), '--', color='gra
 plt.xlabel('Day')
 plt.ylabel('Cumulative elevation change [m]')
 plt.xlim(0,model_end)
-plt.ylim(-0.05,0.05)
+# plt.ylim(-0.05,0.05)
+
+total_dz = np.abs(min(dz_arr_cum_masked))
+total_dV = total_dz*0.1475*0.1475
+total_load = total_dV*2650
+total_load_div = total_load/2
+sed_load = total_load_div/(540*0.1475)
+
+print('Sediment load per meter of road: ', sed_load)
 
 
 #%%
@@ -351,7 +359,7 @@ plt.plot(range(0,model_end), sa_arr)
 plt.xlabel('Day')
 plt.ylabel('Average active depth [m]')
 plt.xlim(0,model_end)
-# plt.ylim(0.0175,0.02)
+plt.ylim(0.019,0.02)
 plt.show()
 
 plt.plot(range(0,model_end), ss_arr)
