@@ -68,7 +68,7 @@ def ErodibleGrid(nrows, ncols, spacing, full_tire):
                     elev = -0.762
                     flag = False
                     roughness = 0.1
-                elif h < road_peak and h > 8: #update latitudinal slopes based on location related to road_peak
+                elif h <= road_peak and h > 8: #update latitudinal slopes based on location related to road_peak
                     elev += up
                     flag = True
                     roughness = 0.05
@@ -103,7 +103,7 @@ def ErodibleGrid(nrows, ncols, spacing, full_tire):
                     elev = -0.762
                     flag = False
                     roughness = 0.1
-                elif h < road_peak and h > 4: #update latitudinal slopes based on location related to road_peak
+                elif h <= road_peak and h > 4: #update latitudinal slopes based on location related to road_peak
                     elev += up
                     flag = True
                     roughness = 0.05
@@ -137,16 +137,18 @@ mg.at_node['active__depth'] = np.ones(540*72)*0.02
 mg.at_node['surfacing__depth'] = np.ones(540*72)*0.23
 mg.at_node['ballast__depth'] = np.ones(540*72)*2.0
 
+#for full tire width
+# mg.at_node['active__depth'] = np.ones(270*36)*0.02
+# mg.at_node['surfacing__depth'] = np.ones(270*36)*0.23
+# mg.at_node['ballast__depth'] = np.ones(270*36)*2.0
+
+
 #add absolute elevation fields that will update based on z updates
 mg.at_node['active__elev'] = z
 mg.at_node['surfacing__elev'] = z - mg.at_node['active__depth']
 mg.at_node['ballast__elev'] = z - mg.at_node['active__depth']\
      - mg.at_node['surfacing__depth']
 
-#for full tire width
-# mg.at_node['active__depth'] = np.ones(270*36)*0.0275
-# mg.at_node['surfacing__depth'] = np.ones(270*36)*0.23
-# mg.at_node['ballast__depth'] = np.ones(270*36)*2.0
 
 #%% Plot initial grid
 # Set up the figure.
@@ -182,12 +184,12 @@ Z = z.reshape(mg.shape)
 
 #%% Run the component
 #half tire width
-center = 39
+center = 40
 half_width = 7 
 full_tire = False
 
 #full tire width
-# center = 20 
+# center = 20
 # half_width = 4
 # full_tire=True
 
@@ -201,7 +203,7 @@ fa = FlowAccumulator(mg,
 
 # # Choose parameter values for the stream power (SP) equation
 # # and instantiate an object of the FastscapeEroder
-K_sp=0.275# erodibility in SP eqtn; this is a guess
+K_sp=0.5# erodibility in SP eqtn; this is a guess
 sp = FastscapeEroder(mg, 
                      K_sp=K_sp,
                      threshold_sp=0.0,
@@ -212,6 +214,7 @@ sp = FastscapeEroder(mg,
 mask = road_flag
 
 z_limit = mg.at_node['topographic__elevation'] - mg.at_node['active__depth']
+bottom_elev = mg.at_node['ballast__elev'].copy() - 2
 intensity_arr=[]
 dt_arr = []
 dz_arr_masked=[]
@@ -221,10 +224,13 @@ ss_arr=[]
 sb_arr=[]
 tracks=[]
 
+active_depth_init = mg.at_node['active__depth']
+surfacing_depth_init = mg.at_node['surfacing__depth']
+ballast_depth_init = mg.at_node['ballast__depth']
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
 
 #define how long to run the model
-model_end = int(365) #days
+model_end = int(95) #days
 for i in range(0, model_end): #loop through model days
     z_ini = mg.at_node['topographic__elevation'].copy()
     tpe.run_one_step()
@@ -255,6 +261,7 @@ for i in range(0, model_end): #loop through model days
         intensity_arr.append(intensity)
 
         mg.at_node['water__unit_flux_in'] = np.ones(540*72)*intensity*2.77778e-7
+        # mg.at_node['water__unit_flux_in'] = np.ones(270*36)*intensity*2.77778e-7
         fa.accumulate_flow()
         sp.run_one_step(dt)
         if any(z[tracks[i][0]] <= z_limit[tracks[i][0]]) or\
@@ -310,13 +317,16 @@ for i in range(0, model_end): #loop through model days
         # plt.savefig('output/dz_cum_%i_days.png' %i)
         plt.show()
 
-    sa = mg.at_node['topographic__elevation'][tracks[i][0:6]].mean()\
-            - mg.at_node['surfacing__elev'][tracks[i][0:6]].mean() #active depth change?
+    sa = (mg.at_node['topographic__elevation'].mean()\
+            - mg.at_node['surfacing__elev'].mean())  #active_depth_init.mean() - 
     sa_arr.append(sa)
-    ss = mg.at_node['surfacing__depth'][tracks[i][0:2]].mean() #-\
+    ss = (mg.at_node['surfacing__elev'].mean()\
+        - mg.at_node['ballast__elev'].mean())
     ss_arr.append(ss)
-    sb = mg.at_node['ballast__depth'][tracks[i][0:2]].mean() #-\
+    sb = (mg.at_node['ballast__elev'].mean()\
+        -bottom_elev.mean())
     sb_arr.append(sb)
+
 #%%
 plt.bar(range(0,model_end), np.multiply(intensity_arr,np.multiply(dt_arr,24)))
 plt.xlabel('Day')
@@ -356,24 +366,24 @@ print('Sediment load per meter of road: ', sed_load)
 
 #%%
 plt.plot(range(0,model_end), sa_arr)
+# plt.plot(range(0,model_end), ss_arr)
+# plt.plot(range(0,model_end), sb_arr)
 plt.xlabel('Day')
-plt.ylabel('Average active depth [m]')
+plt.ylabel('Individual layer elevation changes [m]')
 plt.xlim(0,model_end)
-plt.ylim(0.019,0.02)
+# plt.ylim(0.019,0.02)
 plt.show()
 
 plt.plot(range(0,model_end), ss_arr)
 plt.xlabel('Day')
-plt.ylabel('Average surfacing depth [m]')
+plt.ylabel('Individual layer elevation changes [m]')
 plt.xlim(0,model_end)
-plt.ylim(0.228,0.23)
 plt.show()
 
 plt.plot(range(0,model_end), sb_arr)
 plt.xlabel('Day')
-plt.ylabel('Average ballast depth [m]')
+plt.ylabel('Individual layer elevation changes [m]')
 plt.xlim(0,model_end)
-plt.ylim(1.998,2.0)
 plt.show()
 
 #%%
