@@ -1,7 +1,7 @@
 """
 Purpose: Full road erosion model driver - testing
 Original creation: 03/12/2018
-Latest update: 06/05/2025
+Latest update: 06/23/2025
 Author: Amanda Alvis
 """
 #%% Load python packages and set some defaults
@@ -193,6 +193,8 @@ full_tire = False
 # half_width = 4
 # full_tire=True
 
+# np.random.seed(2)
+
 tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=5, \
     scat_loss=8e-5) #initialize component
 fa = FlowAccumulator(mg,
@@ -201,9 +203,9 @@ fa = FlowAccumulator(mg,
                      flow_director='D8',
                      )
 
-# # Choose parameter values for the stream power (SP) equation
-# # and instantiate an object of the FastscapeEroder
-K_sp=0.5# erodibility in SP eqtn; this is a guess
+# Choose parameter values for the stream power (SP) equation
+# and instantiate an object of the FastscapeEroder
+K_sp=0.25# erodibility in SP eqtn; this is a guess
 sp = FastscapeEroder(mg, 
                      K_sp=K_sp,
                      threshold_sp=0.0,
@@ -230,7 +232,7 @@ ballast_depth_init = mg.at_node['ballast__depth']
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
 
 #define how long to run the model
-model_end = int(95) #days
+model_end = int(90) #days
 for i in range(0, model_end): #loop through model days
     z_ini = mg.at_node['topographic__elevation'].copy()
     tpe.run_one_step()
@@ -317,14 +319,14 @@ for i in range(0, model_end): #loop through model days
         # plt.savefig('output/dz_cum_%i_days.png' %i)
         plt.show()
 
-    sa = (mg.at_node['topographic__elevation'].mean()\
-            - mg.at_node['surfacing__elev'].mean())  #active_depth_init.mean() - 
+    sa = mg.at_node['active__elev'].mean()\
+            - mg.at_node['surfacing__elev'].mean() 
     sa_arr.append(sa)
-    ss = (mg.at_node['surfacing__elev'].mean()\
-        - mg.at_node['ballast__elev'].mean())
+    ss = mg.at_node['surfacing__depth'].mean()\
+        # - mg.at_node['ballast__elev'].mean()
     ss_arr.append(ss)
-    sb = (mg.at_node['ballast__elev'].mean()\
-        -bottom_elev.mean())
+    sb = mg.at_node['ballast__depth'].mean()\
+        # -bottom_elev.mean()
     sb_arr.append(sb)
 
 #%%
@@ -468,7 +470,7 @@ plt.show()
 
 #%%
 #save rutted grid
-# native_landlab.save_grid(mg, 'rutted_grid.grid', clobber=True)
+# native_landlab.save_grid(mg, './tutorials/rutted_grid.grid', clobber=True)
 
 #%% FlowAccumulator
 # Instantiate Landlab FlowAccumulator using 'MFD' as the flow director, spatially distributed runoff field in m/s, and
