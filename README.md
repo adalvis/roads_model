@@ -1,25 +1,60 @@
-# WADNR Roads Project Model
-Driver for testing and tutorials for learning the distributed roads 
-model components being developed/are already developed in Landlab.
+# WADNR Roads Project Distributed Model
+**Updated:** 06/23/2025
 
-## First component: `TruckPassErosion`
-Calculate sediment depths for forest road cross section layers based
+## Summary
+This repository contains a driver for testing and tutorials for learning the distributed roads 
+model components that are being developed/are already developed in Landlab.
+
+## Model component descriptions
+### First component: `TruckPassErosion`
+Calculates sediment depths for forest road cross section layers based
 on traffic-induced, erosion-enhancing processes: pumping, crushing,
-scattering (and by default, flow rerouting).
+scattering (and by default, flow rerouting). This is a net-zero component
+(i.e., the mass balance is 0).
 
-### References
+#### References
 Alvis, A. D., Luce, C. H., & Istanbulluoglu, E. (2023). How does traffic 
 affect erosion of unpaved forest roads? Environmental Reviews, 31(1), 
 182–194. https://doi.org/10.1139/er-2022-0032
 
+<p align="center" width="100%">
+    <img src="./TruckPassErosion_Component.png" width="60%">
+</p>
 
-![Schematic describing the TruckPassErosion component.](TruckPassErosion_Component.png)
-
-## Second component: `FlowAccumulator` or `KinwaveImplicitOverlandFlow`
-Route flow over the forest road surface. Which component is chosen depends on 
+### Second component: `FlowAccumulator` or `KinwaveImplicitOverlandFlow`
+Routes flow over the forest road surface. Which component is chosen depends on 
 the timestep of rainfall/runoff being fed to the model. `FlowAccumulator` works
 best for a coarser timestep, whereas `KinwaveImplicitOverlandFlow` works best for
 a finer timestep. However, `FlowAccumulator` is a much faster flow router than
 `KinwaveImplicitOverlandFlow`.
 
-## Third component: `FastscapeEroder`
+### Third component: `FastscapeEroder`
+Erodes the landscape based on a stream power framework. The erosion of each node is 
+based on an erosivity value, the contributing drainage area (or flow, depending on 
+how the component is initialized), and the slope.
+A future iteration of this spatially distributed model will use a different erosion
+component based on slightly different variables (such as roughness).
+
+## Repository navigation
+### `Main folder`
+
+1. `test_driver.py` is a script used to test the model components and how they work
+together.
+   - **Input:** Model parameters.
+   - **Output:** Plots of average road layer depths vs. time and erosion vs. time.
+
+### `tutorials`
+1. `TruckPassErosion_tutorial.ipynb` is a Jupyter notebook that demonstrates the utility
+of the newly developed `TruckPassErosion` component.
+together.
+   - **Input:** Model parameters.
+   - **Output:** Plots of road layer cross sections and road surface.
+2. `FlowRouting_tutorial.ipynb` is a Jupyter notebook that demonstrates how to use either
+`FlowAccumulator` or `KinwaveImplicitOverlandFlow`.
+   - **Input:** A pre-rutted grid (`rutted_grid.grid`).
+   - **Output:** Maps of surface water discharge.
+3. `FullModel_tutorial.ipynb` is a Jupyter notebook that demonstrates how to run the full
+distributed model (including `FastscapeEroder`).
+   - **Input:** Necessary model parameters.
+   - **Output:** Maps of surface water discharge, plots of average road layer depths vs. time,
+    and erosion vs. time.
