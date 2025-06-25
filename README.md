@@ -1,5 +1,5 @@
 # WADNR Roads Project Distributed Model
-**Updated:** 06/23/2025
+**Updated:** 06/25/2025
 
 ## Summary
 This repository contains a driver for testing and tutorials for learning the distributed roads 
@@ -18,7 +18,7 @@ affect erosion of unpaved forest roads? Environmental Reviews, 31(1),
 182–194. https://doi.org/10.1139/er-2022-0032
 
 <p align="center" width="100%">
-    <img src="./TruckPassErosion_Component.png" width="60%">
+    <img src="./TruckPassErosion_Component.png" width="80%">
 </p>
 
 ### Second component: `FlowAccumulator` or `KinwaveImplicitOverlandFlow`
