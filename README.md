@@ -1,5 +1,5 @@
 # WADNR Roads Project Distributed Model
-**Updated:** 06/25/2025
+**Updated:** 06/28/2025
 
 ## Summary
 This repository contains a driver for testing and tutorials for learning the distributed roads 
@@ -10,7 +10,7 @@ model components that are being developed/are already developed in Landlab.
 Calculates sediment depths for forest road cross section layers based
 on traffic-induced, erosion-enhancing processes: pumping, crushing,
 scattering (and by default, flow rerouting). This is a net-zero component
-(i.e., the mass balance is 0).
+(i.e., the mass balance for the whole system is 0).
 
 #### References
 Alvis, A. D., Luce, C. H., & Istanbulluoglu, E. (2023). How does traffic 
