@@ -169,7 +169,7 @@ full_tire = False
 tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=5, \
     scat_loss=8e-5) #initialize component
 fa = FlowAccumulator(mg, surface='topographic__elevation', flow_director="FlowDirectorD8", runoff_rate=1.38889e-6)
-oft = OverlandFlowTransporter(mg, ditch_treatment="grass")
+oft = OverlandFlowTransporter(mg)
 
 #%%
 mask = road_flag
@@ -273,22 +273,14 @@ for i in range(0, run_duration):
             if unit_discharge[k] > 0 and road_flag[k] == 0:
                 mg.at_node['grain__roughness'][k] = 0.05
                 mg.at_node['total__roughness'][k] = 0.1
-                #     match self._ditch_treatment:
-                #         case "armor":
-                #             self._n_t[i] = 0.1
-                #         case "rock":
-                #             self._n_t[i] = 0.25
-                #         case "sp_wattles":
-                #             self._n_t[i] = 0.4
-                #         case "sp_wattles_late":
-                #             self._n_t[i] = 0.6
-                #         case "grass":
-                #             self._n_t[i] = 0.6
-                #         case "de_wattles":
-                #             self._n_t[i] = 0.725
-                #         case _:
-                #             self._n_t[i] = 0.05
-                #     self._f_s[i] = (self._n_f[i]/self._n_t[i])**(24/13)
+                mg.at_node['shear_stress__partitioning'][k] = \
+                    (mg.at_node['grain__roughness'][k]\
+                        /mg.at_node['total__roughness'][k])^(24/13)
+   #     for i in self.grid.nodes.reshape(np.size(self.grid.nodes))[self._road_flag==0]:
+    #         if self._unit_discharge[i]
+                        
+    #         self._water_depth[i] = ((self._n_t[i]*self._unit_discharge[i])/\
+    #             (np.sqrt(6*self._slope[i]/0.718)))**(6/13) #use overall channel S
 
     sa = mg.at_node['active__elev'].mean()\
             - mg.at_node['surfacing__elev'].mean() 
