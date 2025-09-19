@@ -18,7 +18,7 @@ seed = 1 #56
 elapsed_time = 0.0
 np.random.seed(seed)
 
-#%%
+#%% Method for creating DEM
 def ErodibleGrid(nrows, ncols, spacing, full_tire):
     mg = RasterModelGrid((nrows,ncols),spacing)
     z = mg.add_zeros('topographic__elevation', at='node') #create the topographic__elevation field
@@ -117,21 +117,21 @@ def ErodibleGrid(nrows, ncols, spacing, full_tire):
 mg, z, road_flag, n = ErodibleGrid(540,72,0.1475,False) #half tire width
 noise_amplitude=0.005
 
-np.random.seed(1)
+np.random.seed(seed)
 
 # cores = mg.core_nodes
 road = road_flag==1
 
 z[road] += noise_amplitude * np.random.rand(
     len(z[road])
-)
+) #z is the road elevation
 
-#add depth fields that will update in the component
-mg.at_node['active__depth'] = np.ones(540*72)*0.005
+#Add depth fields that will update in the component; these are the initial conditions
+mg.at_node['active__depth'] = np.ones(540*72)*0.005 #This is the most likely to change; the active layer is essentially 0.005 m right now.
 mg.at_node['surfacing__depth'] = np.ones(540*72)*0.23
-mg.at_node['ballast__depth'] = np.ones(540*72)*2.0
+mg.at_node['ballast__depth'] = np.ones(540*72)*2.0 #This depth can technically be anything; it just needs to be much larger than the active layer and the surfacing layer depths.
 
-#add absolute elevation fields that will update based on z updates
+#Add absolute elevation fields that will update based on z updates
 mg.at_node['active__elev'] = z
 mg.at_node['surfacing__elev'] = z - mg.at_node['active__depth']
 mg.at_node['ballast__elev'] = z - mg.at_node['active__depth']\
@@ -158,14 +158,13 @@ X = mg.node_x.reshape(mg.shape)
 Y = mg.node_y.reshape(mg.shape)
 Z = z.reshape(mg.shape)
 
-#%% Run the component
-#half tire width
+#%% Prep variables for component run
+#We're using half tire width for node spacing
 center = 40
 half_width = 7 
 full_tire = False
 
-#%%
-# Instantiate components
+#%% Instantiate components
 tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=5, \
     scat_loss=8e-5) #initialize component
 fa = FlowAccumulator(mg, surface='topographic__elevation', \
@@ -173,7 +172,7 @@ fa = FlowAccumulator(mg, surface='topographic__elevation', \
     depression_finder="DepressionFinderAndRouter")
 oft = OverlandFlowTransporter(mg)
 
-#%%
+#%% Run the model!
 mask = road_flag
 z_limit = mg.at_node['topographic__elevation'] - mg.at_node['active__depth']
 intensity_arr=[]
@@ -183,7 +182,6 @@ dz_arr_cum = []
 sa_arr=[]
 ss_arr=[]
 sb_arr=[]
-tracks=[]
 sediment_outflux_channel = []
 sediment_influx_channel = []
 sediment_outflux_ruts = []
@@ -192,6 +190,7 @@ truck_num=0
 
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
 
+#%% Run the model!
 # Main loop
 start = time.time()
 for i in range(0, run_duration):
@@ -199,12 +198,13 @@ for i in range(0, run_duration):
     surfacing_init = mg.at_node['surfacing__depth'].copy()
     ballast_init = mg.at_node['ballast__depth'].copy()
     z_ini = mg.at_node['topographic__elevation'].copy()
+    
     tpe.run_one_step()
-    tracks.append(tpe.tire_tracks)
+
     truck_num += tpe._truck_num
     print(tpe._truck_num)
+    
     p_storm = 0.25
-
     chance = np.random.uniform()
 
     if chance > p_storm:
@@ -223,19 +223,18 @@ for i in range(0, run_duration):
 
     elif chance <= p_storm:
         dt = np.random.exponential(scale=1/6)
-        print(dt)
         dt_arr.append(dt)
+        print(dt)
+
         intensity = np.random.exponential(scale=5)
-        print(intensity)
         intensity_arr.append(intensity)
+        print(intensity)
 
         mg.at_node['water__unit_flux_in'] = np.ones(540*72)*intensity*2.77778e-7
-
         fa.accumulate_flow()
 
         #=================================Calculate overland flow transport=================================
         oft.run_one_step(dt)
-
 
         dz = z-z_ini #calculate elevation change at each time step
         dz_arr.append(sum(dz[mask]))
@@ -336,22 +335,7 @@ for i in range(0, run_duration):
 wall_time = time.time() - start
 print("Wall time for run:", wall_time, "s")
 
-#%%
-# # Display the final topography in map view
-# imshow_grid(mg, z)
-
-# dx=0.1475
-# nrows=540
-# ncols=72
-
-# # Display the final topography in 3d surface view
-# X = np.arange(0, dx * ncols, dx)
-# Y = np.arange(0, dx * nrows, dx)
-# X, Y = np.meshgrid(X, Y)
-
-# fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-# ax.plot_surface(X, Y, z.reshape((nrows, ncols)))
-#%%
+#%% Rainfall plots
 plt.bar(range(0,run_duration), np.multiply(intensity_arr,np.multiply(dt_arr,24)))
 plt.xlabel('Day')
 plt.ylabel('Rainfall [mm]')
@@ -363,13 +347,13 @@ plt.xlabel('Day')
 plt.ylabel('Rainfall intensity [mm/hr]')
 plt.xlim(0,run_duration)
 plt.show()
-#%%
+
+#%% Mass change plots
 plt.plot(range(0,run_duration), np.multiply(dz_arr,0.1475**2*2650))
 plt.plot(range(0,run_duration), np.zeros(len(range(0,run_duration))), '--', color='gray')
 plt.xlabel('Day')
 plt.ylabel('Total mass change between time steps - \nroad [$kg$]')
 plt.xlim(0,run_duration)
-# plt.ylim(-0.05,0.05)
 plt.show()
 
 plt.plot(range(0,run_duration), np.multiply(dz_arr_cum,0.1475**2*2650)/2)
@@ -377,13 +361,7 @@ plt.plot(range(0,run_duration), np.zeros(len(range(0,run_duration))), '--', colo
 plt.xlabel('Day')
 plt.ylabel('Cumulative mass change (from dz) - \nhalf road [$kg$]')
 plt.xlim(0,run_duration)
-# plt.ylim(-0.05,0.05)
 plt.show()
-
-total_dz = np.abs(min(dz_arr_cum))
-total_dV = total_dz*0.1475*0.1475
-total_load = total_dV*2650
-total_load_div = total_load/2
 
 plt.plot(range(0,run_duration), -((((np.array(sediment_influx_channel)*rho_s*dt_arr).cumsum()))\
         +(np.array(sediment_outflux_ruts)*rho_s*dt_arr).cumsum()))
@@ -396,14 +374,13 @@ plt.show()
 
 #%%
 sediment_mass = (np.array(sediment_influx_channel)*rho_s*dt_arr - (np.array(sediment_outflux_ruts)*rho_s*dt_arr) - \
-    np.array(sediment_outflux_channel)*rho_s*dt_arr)# - np.array(sediment_outflux_ruts)*rho_s*dt_arr)
+    np.array(sediment_outflux_channel)*rho_s*dt_arr)
 
 plt.plot(range(0,run_duration), sediment_mass)
 plt.plot(range(0,run_duration), np.zeros(len(range(0,run_duration))), '--', color='gray')
 plt.xlabel('Day')
 plt.ylabel('Total mass change between time steps - \nditch line [$kg$]')
 plt.xlim(0,run_duration)
-# plt.ylim(-0.05,0.05)
 plt.show()
 
 plt.plot(range(0,run_duration), (np.multiply(sediment_influx_channel,dt_arr)*rho_s).cumsum())
@@ -411,7 +388,6 @@ plt.plot(range(0,run_duration), np.zeros(len(range(0,run_duration))), '--', colo
 plt.xlabel('Day')
 plt.ylabel('Cumulative mass inflow - \nrouted into ditch [$kg$]')
 plt.xlim(0,run_duration)
-# plt.ylim(-0.05,0.05)
 plt.show()
 
 plt.plot(range(0,run_duration), -(np.multiply(sediment_outflux_channel,dt_arr)*rho_s).cumsum()\
@@ -420,30 +396,41 @@ plt.plot(range(0,run_duration), np.zeros(len(range(0,run_duration))), '--', colo
 plt.xlabel('Day')
 plt.ylabel('Cumulative mass outflow - \nrouted out of ditch [$kg$]')
 plt.xlim(0,run_duration)
-# plt.ylim(-0.05,0.05)
 plt.show()
 
-# plt.plot(range(0,run_duration), sediment_mass.cumsum())
-# plt.plot(range(0,run_duration), np.zeros(len(range(0,run_duration))), '--', color='gray')
-# plt.xlabel('Day')
-# plt.ylabel('Cumulative mass change - \nditch line [$kg$]')
-# plt.xlim(0,run_duration)
-# # plt.ylim(-0.05,0.05)
-# plt.show()
+#%%
+total_dz = np.abs(min(dz_arr_cum))
+total_dV = total_dz*0.1475*0.1475
+total_load = total_dV*2650
+total_load_div = total_load/2
 
-print('Total rainfall (90 days):', sum(np.multiply(intensity_arr,np.multiply(dt_arr,24))), 'mm')
+print(
+    'Total rainfall (90 days):', sum(np.multiply(intensity_arr,np.multiply(dt_arr,24))), 'mm'
+    )
+
+print(
+    'Sediment pumped:', mg.at_node['sediment__added'].sum()*0.1475*0.1475*2650*0.6, 'kg'
+    )
+
 print('Comparison between sediment load from road elevation change calculation and channel influx from OFT:',\
     total_load_div - ((((np.array(sediment_influx_channel)*rho_s*dt_arr).sum()))\
-        +(np.array(sediment_outflux_ruts)*rho_s*dt_arr).sum()))
+        +(np.array(sediment_outflux_ruts)*rho_s*dt_arr).sum())
+    )
 
-print('Sediment load from road (half-road estimate):', total_load_div, 'kg')
-print('Sediment load from road (actual):', ((((np.array(sediment_influx_channel)*rho_s*dt_arr).sum()))\
-        +(np.array(sediment_outflux_ruts)*rho_s*dt_arr).sum()), 'kg')
+print(
+    'Sediment load from road (half-road dz estimate):', total_load_div, 'kg'
+    )
 
-print('Sediment load from road & ditch:', (np.array(sediment_outflux_channel)*rho_s*dt_arr).sum()\
-    +(np.array(sediment_outflux_ruts)*rho_s*dt_arr).sum(), 'kg')
+print(
+    'Sediment load from road (half-road OFT calculation):', ((((np.array(sediment_influx_channel)*rho_s*dt_arr).sum()))\
+        +(np.array(sediment_outflux_ruts)*rho_s*dt_arr).sum()), 'kg'
+    )
 
-print('Sediment pumped:', mg.at_node['sediment__added'].sum()*0.1475*0.1475*2650*0.6, 'kg')
+print(
+    'Sediment load from road & ditch:', (np.array(sediment_outflux_channel)*rho_s*dt_arr).sum()\
+    +(np.array(sediment_outflux_ruts)*rho_s*dt_arr).sum(), 'kg'
+    )
+
 
 #%%
 # plt.plot(range(0,run_duration), np.multiply(sa_arr, 1000).cumsum())
