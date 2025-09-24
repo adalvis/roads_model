@@ -1,8 +1,8 @@
 # WADNR Roads Project Distributed Model
-**Updated:** 06/28/2025
+**Updated:** 09/24/2025
 
 ## Summary
-This repository contains a driver for testing and tutorials for learning the distributed roads 
+This repository contains drivers for testing and tutorials for learning the distributed roads 
 model components that are being developed/are already developed in Landlab.
 
 ## Model component descriptions
@@ -35,13 +35,30 @@ how the component is initialized), and the slope.
 A future iteration of this spatially distributed model will use a different erosion
 component based on slightly different variables (such as roughness).
 
+### Third component (update): `OverlandFlowTransporter`
+Erodes a surface with shallow overland flow using physics-based formulations for 
+entrainment and transport that can directly use sediment size distribution and surface 
+roughness. The sediment transport rate is calculated using Govers' equation (1992) 
+with shear stress partitioning
+
 ## Repository navigation
 ### `Main folder`
 
-1. `test_driver.py` is a script used to test the model components and how they work
-together.
+1. `test_driver.py` is a script used to test the model components (`TruckPassErosion`, 
+`FlowAccumulator`, `FastscapeEroder`) and how they work together.
    - **Input:** Model parameters.
    - **Output:** Plots of average road layer depths vs. time and erosion vs. time.
+
+2. `test.py` is a script used to test the model components (`TruckPassErosion`, 
+`FlowAccumulator`, `OverlandFlowTransporter`) and how they work together.
+   - **Input:** Model parameters.
+   - **Output:** Sediment load from road and ditch line, as well as a number of plots
+   demonstrating different outputs from the model.
+
+3. `group_rainfall.py` is a utilitarian script used to aggregate hourly rainfall into daily
+rainfall.
+   - **Input:** Hourly rainfall data.
+   - **Output:** Aggregated daily rainfall data.
 
 ### `tutorials`
 1. `TruckPassErosion_tutorial.ipynb` is a Jupyter notebook that demonstrates the utility
