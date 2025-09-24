@@ -1,3 +1,4 @@
+#%%
 import time
 
 import matplotlib.pyplot as plt
@@ -9,17 +10,12 @@ np.set_printoptions(threshold=np.inf)
 
 #%%
 # Parameters
-run_duration = 90  # run duration, days
-dt = 1  # time-step duration, days
-seed = 1 #56
-
-#%%
-# Control and derived parameters, and other setup
-elapsed_time = 0.0
+run_duration = 10  # run duration, days
+seed = 1
 np.random.seed(seed)
 
 #%% Method for creating DEM
-def ErodibleGrid(nrows, ncols, spacing, full_tire):
+def ErodibleGrid(nrows, ncols, spacing, full_tire, long_slope):
     mg = RasterModelGrid((nrows,ncols),spacing)
     z = mg.add_zeros('topographic__elevation', at='node') #create the topographic__elevation field
     road_flag = mg.add_zeros('flag', at='node') #create a road_flag field for determining whether a 
@@ -107,21 +103,18 @@ def ErodibleGrid(nrows, ncols, spacing, full_tire):
                 z[g*ncols + h] = elev #update elevation based on x & y locations
                 road_flag[g*ncols+h] = flag #update road_flag based on x & y locations
                 n[g*ncols + h] = roughness #update roughness values based on x & y locations
-        
-    z += mg.node_y*0.05 #add longitudinal slope to road segment
+    
+    z += mg.node_y*long_slope #add longitudinal slope to road segment
     road_flag = road_flag.astype(bool) #Make sure road_flag is a boolean array
                 
     return(mg, z, road_flag, n)          
 
 #%% Run method to create grid; add new fields
-mg, z, road_flag, n = ErodibleGrid(540,72,0.1475,False) #half tire width
+mg, z, road_flag, n = ErodibleGrid(nrows=540, ncols=72,\
+    spacing=0.1475, full_tire=False, long_slope=0.05) # Update long_slope to change slope of DEM
+
 noise_amplitude=0.005
-
-np.random.seed(seed)
-
-# cores = mg.core_nodes
 road = road_flag==1
-
 z[road] += noise_amplitude * np.random.rand(
     len(z[road])
 ) #z is the road elevation
@@ -149,14 +142,14 @@ plt.tight_layout()
 plt.show()
 
 #%% Prep some variables for later
-xsec_pre = mg.at_node['topographic__elevation'][4392*2:4428*2].copy() #half tire width
-xsec_surf_pre = mg.at_node['surfacing__elev'][4392*2:4428*2].copy()
-mg_pre = mg.at_node['topographic__elevation'].copy()
-active_pre = mg.at_node['active__depth'].copy()
+# xsec_pre = mg.at_node['topographic__elevation'][4392*2:4428*2].copy() #half tire width
+# xsec_surf_pre = mg.at_node['surfacing__elev'][4392*2:4428*2].copy()
+# mg_pre = mg.at_node['topographic__elevation'].copy()
+# active_pre = mg.at_node['active__depth'].copy()
 
-X = mg.node_x.reshape(mg.shape)
-Y = mg.node_y.reshape(mg.shape)
-Z = z.reshape(mg.shape)
+# X = mg.node_x.reshape(mg.shape)
+# Y = mg.node_y.reshape(mg.shape)
+# Z = z.reshape(mg.shape)
 
 #%% Prep variables for component run
 #We're using half tire width for node spacing
@@ -170,33 +163,32 @@ tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=5, \
 fa = FlowAccumulator(mg, surface='topographic__elevation', \
     flow_director="FlowDirectorD8", runoff_rate=1.538889e-6, \
     depression_finder="DepressionFinderAndRouter")
-oft = OverlandFlowTransporter(mg)
+oft = OverlandFlowTransporter(mg, tau_c=0.052)
 
 #%% Run the model!
 mask = road_flag
-z_limit = mg.at_node['topographic__elevation'] - mg.at_node['active__depth']
+z_limit = mg.at_node['topographic__elevation'] - mg.at_node['active__depth'] #You may need to use this to create a layer limit
 intensity_arr=[]
 dt_arr = []
 dz_arr=[]
 dz_arr_cum = []
-sa_arr=[]
-ss_arr=[]
-sb_arr=[]
+# sa_arr=[]
+# ss_arr=[]
+# sb_arr=[]
 sediment_outflux_channel = []
 sediment_influx_channel = []
 sediment_outflux_ruts = []
 channel_discharge_arr = []
 truck_num=0
-
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
 
 #%% Run the model!
 # Main loop
 start = time.time()
 for i in range(0, run_duration):
-    active_init = mg.at_node['active__depth'].copy()
-    surfacing_init = mg.at_node['surfacing__depth'].copy()
-    ballast_init = mg.at_node['ballast__depth'].copy()
+    # active_init = mg.at_node['active__depth'].copy()
+    # surfacing_init = mg.at_node['surfacing__depth'].copy()
+    # ballast_init = mg.at_node['ballast__depth'].copy()
     z_ini = mg.at_node['topographic__elevation'].copy()
     
     tpe.run_one_step()
@@ -204,10 +196,13 @@ for i in range(0, run_duration):
     truck_num += tpe._truck_num
     print(tpe._truck_num)
     
+    #==========Update this section (intensity & dt) if you want to include experiment rainfall data==========
+    # You should not need an if/elif statement; you should be able to just loop through the intensity and dt datasets;
+    # use only 90 day chunks of the datasets
     p_storm = 0.25
-    chance = np.random.uniform()
+    no_chance = np.random.uniform()
 
-    if chance > p_storm:
+    if no_chance > p_storm:
         intensity_arr.append(0)
         dt_arr.append(0)
 
@@ -221,7 +216,7 @@ for i in range(0, run_duration):
         sediment_outflux_ruts.append(0)
         sediment_influx_channel.append(0)
 
-    elif chance <= p_storm:
+    elif no_chance <= p_storm:
         dt = np.random.exponential(scale=1/6)
         dt_arr.append(dt)
         print(dt)
@@ -369,7 +364,6 @@ plt.plot(range(0,run_duration), np.zeros(len(range(0,run_duration))), '--', colo
 plt.xlabel('Day')
 plt.ylabel('Cumulative mass change (from OFT)- \nhalf road [$kg$]')
 plt.xlim(0,run_duration)
-# plt.ylim(-0.05,0.05)
 plt.show()
 
 #%%
