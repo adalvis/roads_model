@@ -3,6 +3,7 @@ import time
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from landlab import RasterModelGrid, imshow_grid
 from landlab.components import OverlandFlowTransporter, FlowAccumulator, TruckPassErosion
@@ -11,15 +12,18 @@ from erodible_grid import Erodible_Grid
 
 #%%
 # Parameters
-run_duration = 10  # run duration, days - shouldn't this be 90 days??
-seed = 4
+run_duration = 10  # run duration, days 
+seed = 1        # this isn't used to calculate rainfall, it ensures that anything else randomly generated isn't 
+                # going to be changing between runs. I changed TPE to not have a randomly generated
+                # truck number in that file.
+Sa_ini = 0.005 # active depth in m
 np.random.seed(seed)
 
 #%% Run method to create grid; add new fields
 eg = Erodible_Grid(nrows=540, ncols=72,\
-    spacing=0.1475, full_tire=False, long_slope=0.05) # Update long_slope to change slope of DEM
+    spacing=0.1475, full_tire=False, long_slope=0.05) # update long slope to change DEM
 
-mg, z, road_flag, n =eg()
+mg, z, road_flag, n = eg() 
 
 noise_amplitude=0.005
 road = road_flag==1
@@ -28,7 +32,7 @@ z[road] += noise_amplitude * np.random.rand(
 ) #z is the road elevation
 
 #Add depth fields that will update in the component; these are the initial conditions
-mg.at_node['active__depth'] = np.ones(540*72)*0.005 #This is the most likely to change; the active layer is essentially 0.005 m right now.
+mg.at_node['active__depth'] = np.ones(540*72)*Sa_ini #This is the most likely to change; the active layer is essentially 0.005 m right now.
 mg.at_node['surfacing__depth'] = np.ones(540*72)*0.23
 mg.at_node['ballast__depth'] = np.ones(540*72)*2.0 #This depth can technically be anything; it just needs to be much larger than the active layer and the surfacing layer depths.
 
@@ -87,57 +91,81 @@ sediment_outflux_channel = []
 sediment_influx_channel = []
 sediment_outflux_ruts = []
 channel_discharge_arr = []
-truck_num=0 # what is this?
+truck_num=0
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
 
 #%% Run the model!
 # Main loop
+
 start = time.time()
 for i in range(0, run_duration):
     # active_init = mg.at_node['active__depth'].copy()
     # surfacing_init = mg.at_node['surfacing__depth'].copy()
     # ballast_init = mg.at_node['ballast__depth'].copy()
     z_ini = mg.at_node['topographic__elevation'].copy()
-    
+
     tpe.run_one_step()
 
     truck_num += tpe._truck_num
     print(tpe._truck_num)
     
-    #==========Update this section (intensity & dt) if you want to include experiment rainfall data==========
-    # You should not need an if/elif statement; you should be able to just loop through the intensity and dt datasets;
     # use only 90 day chunks of the datasets
-    p_storm = 0.25
-    no_chance = np.random.uniform()
 
-    if no_chance > p_storm:
+    # intensity data in mm/hr with dt from the dt document
+    intensity_2024 = pd.read_csv("WY2024_RG_daily_intensity.csv")
+    # change the site name and index values to get different sites and dates
+    intensity_90 = intensity_2024["RG_BISH05_mm"].iloc[:90].values  # first 90 days for site "RG_BISH05"
+
+    # daily dt in hours
+    dt_2024_hours = pd.read_csv("WY2024_RG_daily_dt.csv")
+    dt_2024_hours_90 = dt_2024_hours["RG_BISH05_mm"].iloc[:90].values # first 90 days for site "RG_BISH05"
+    # convert to dt to days
+    dt_2024 = dt_2024_hours_90/24
+    
+    # if rainfall intensity is zero that day, treat it like a no-storm
+    intensity = intensity_90[i]  # use the i-th day's intensity
+    dt_day = dt_2024[i] # use the i-th day's time step
+
+    if intensity <= 0:
+        # mg.at_node['water__unit_flux_in'] = np.zeros(mg.number_of_nodes)
+
         intensity_arr.append(0)
         dt_arr.append(0)
 
-        dz = z-z_ini #calculate elevation change at each time step
+        dz = z - z_ini
         dz_arr.append(sum(dz[mask]))
 
-        dz_cum = z-z_ini_cum #calculate cumulative elevation change
+        dz_cum = z - z_ini_cum
         dz_arr_cum.append(sum(dz_cum[mask]))
 
         sediment_outflux_channel.append(0)
         sediment_outflux_ruts.append(0)
         sediment_influx_channel.append(0)
 
-    elif no_chance <= p_storm:
-        dt = np.random.exponential(scale=1/6)
+
+    else:
+        dt = dt_day  
         dt_arr.append(dt)
-        print(dt)
 
-        intensity = np.random.exponential(scale=5)
         intensity_arr.append(intensity)
-        print(intensity)
+        print(f"Day {i}: Intensity = {intensity:.2f} mm/hr")
 
-        mg.at_node['water__unit_flux_in'] = np.ones(540*72)*intensity*2.77778e-7 # intensity converted to m/s
+        # Convert from mm/hr to m/s
+        rain_m_per_s = intensity * 2.77778e-7 # conversion to m/s
+
+        mg.at_node['water__unit_flux_in'] = np.ones(mg.number_of_nodes) * rain_m_per_s
+
         fa.accumulate_flow()
-        
+    
+
         #=================================Calculate overland flow transport=================================
         oft.run_one_step(dt)
+
+        # chatgpt stuff
+        print("NaN Manning values:", np.isnan(oft._n_f).sum(), np.isnan(oft._n_t).sum())
+        print("Zero Manning values:", np.sum(oft._n_f == 0), np.sum(oft._n_t == 0))
+        print("Negative Manning values:", np.sum(oft._n_f < 0), np.sum(oft._n_t < 0))
+        # end ai slop
 
         dz = z-z_ini #calculate elevation change at each time step
         dz_arr.append(sum(dz[mask]))
@@ -157,43 +185,45 @@ for i in range(0, run_duration):
         plt.show()
 
         mg.add_field('dz_cum', dz_cum, at='node', units='m', clobber=True)
-        # fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
-        # plt.xlabel('Road width (m)')
-        # plt.ylabel('Road length (m)')
-        # im = imshow_grid(mg,'dz_cum', var_name='Cumulative dz', var_units='m', 
-        #              plot_name='Elevation change, t = %i days' %i,
-        #              grid_units=('m','m'), cmap='RdBu', vmin=-0.0001, 
-        #              vmax=0.0001, shrink=0.9)
-        # plt.xlabel('Road width (m)')
-        # plt.ylabel('Road length (m)')
-        # plt.tight_layout()
-        # # plt.savefig('output/dz_cum_%i_days.png' %i)
-        # plt.show()
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+        im = imshow_grid(mg,'dz_cum', var_name='Cumulative dz', var_units='m', 
+                     plot_name='Elevation change, t = %i days' %i,
+                     grid_units=('m','m'), cmap='RdBu', vmin=-0.0001, 
+                     vmax=0.0001, shrink=0.9)
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+        plt.tight_layout()
+        # plt.savefig('output/dz_cum_%i_days.png' %i)
+        plt.show()
 
-        # fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
-        # plt.xlabel('Road width (m)')
-        # plt.ylabel('Road length (m)')
-        # im = imshow_grid(mg,'active__fines', var_name='Active fines', var_units='m', 
-        #              plot_name='Fines depth, t = %i days' %i,
-        #              grid_units=('m','m'), cmap='pink', vmin=0.002, 
-        #              vmax=0.003)
-        # plt.xlabel('Road width (m)')
-        # plt.ylabel('Road length (m)')
-        # plt.tight_layout()
-        # # plt.savefig('output/dz_cum_%i_days.png' %i)
-        # plt.show()
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+        im = imshow_grid(mg,'active__fines', var_name='Active fines', var_units='m', 
+                     plot_name='Fines depth, t = %i days' %i,
+                     grid_units=('m','m'), cmap='pink', vmin=0.002, 
+                     vmax=0.003)
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+        plt.tight_layout()
+        # plt.savefig('output/dz_cum_%i_days.png' %i)
+        plt.show()
 
-        # fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
-        # plt.xlabel('Road width (m)')
-        # plt.ylabel('Road length (m)')
-        # im = imshow_grid(mg,'active__depth', var_name='Active depth', var_units='m', 
-        #              plot_name='Active depth, t = %i days' %i,
-        #              grid_units=('m','m'), cmap='pink', vmin=0.0025, vmax=0.02)
-        # plt.xlabel('Road width (m)')
-        # plt.ylabel('Road length (m)')
-        # plt.tight_layout()
-        # # plt.savefig('output/dz_cum_%i_days.png' %i)
-        # plt.show()
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+        im = imshow_grid(mg,'active__depth', var_name='Active depth', var_units='m', 
+                     plot_name='Active depth, t = %i days' %i,
+                     grid_units=('m','m'), cmap='pink', vmin=0.0025, vmax=0.02)
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+        plt.tight_layout()
+        # plt.savefig('output/dz_cum_%i_days.png' %i)
+        plt.show()
+        slope = mg.at_node['topographic__steepest_slope']
+        print("Slope range:", slope.min(), slope.max())
 
         #=================================Calculate channelized flow transport=================================
         rho_w=1000
@@ -235,19 +265,6 @@ for i in range(0, run_duration):
     # sb = mg.at_node['ballast__depth'][mask].mean()-ballast_init[mask].mean()
     # sb_arr.append(sb)
 
-        # these are just tests to see what is happening after running the for loop
-        print("dt (days):", dt)
-        print("Sed flux (mean):", np.mean(mg.at_node['sediment__volume_outflux']))
-        print("Mass flux per day (kg):",
-          np.mean(mg.at_node['sediment__volume_outflux']) * rho_s * dt * 86400)
-        print("Slope range:", np.nanmin(mg.at_node['topographic__steepest_slope']),
-          np.nanmax(mg.at_node['topographic__steepest_slope']))
-        print("Receiver stats:", np.unique(mg.at_node['flow__receiver_node']).size)
-        print("Water depth range:", np.nanmin(mg.at_node['water__depth']),
-          np.nanmax(mg.at_node['water__depth']))
-        print("Discharge range:", np.nanmin(mg.at_node['surface_water__discharge']),
-          np.nanmax(mg.at_node['surface_water__discharge']))
-
 wall_time = time.time() - start
 print("Wall time for run:", wall_time, "s")
 
@@ -288,9 +305,6 @@ plt.xlim(0,run_duration)
 plt.show()
 
 #%%
-
-
-# we are using m3/s, dt in days, and kg/m3, so we should multiply by 86400, but that just makes it way higher! Seems to be addressed in OFT?
 sediment_mass = (np.array(sediment_influx_channel)*rho_s*dt_arr - (np.array(sediment_outflux_ruts)*rho_s*dt_arr) - \
     np.array(sediment_outflux_channel)*rho_s*dt_arr)
 
@@ -318,7 +332,7 @@ plt.show()
 
 #%%
 total_dz = np.abs(min(dz_arr_cum))
-total_dV = total_dz*0.1475*0.1475 # change cell size, set automatically based on grid
+total_dV = total_dz*0.1475*0.1475
 total_load = total_dV*2650
 total_load_div = total_load/2
 
