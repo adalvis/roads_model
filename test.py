@@ -11,13 +11,27 @@ from erodible_grid import Erodible_Grid
 
 #%%
 # Parameters
-run_duration = 10  # run duration, days - shouldn't this be 90 days??
+run_duration = 30  # run duration, days - shouldn't this be 90 days??
 seed = 4
 np.random.seed(seed)
 
+Sa_ini = 0.005 # active depth in m
+longitudinal_slope = 0.125 # 12.5% for site BISH05
+ditch_n = 0.3
+
+# options of d50 and corresponding tau_c
+d50_arr = [0.000018, 0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.001, 0.005]
+tauc_arr = [0.05244426, 0.1456785, 0.1780515, 0.19909395, 0.226611, 0.258984, 0.291357, 0.3625776, 0.453222, 0.5244426, 0.5989005, 3.6419625]
+
+# index the desired d50 and tau_c values, or find d50 for the site and find tau_c from chart and input here
+# 0-11
+index = 2
+d_50 = d50_arr[index] # [m] ensure this value is changed in function files as well
+tau_c = tauc_arr[index] # tau_c dependent on d_50
+
 #%% Run method to create grid; add new fields
 eg = Erodible_Grid(nrows=540, ncols=72,\
-    spacing=0.1475, full_tire=False, long_slope=0.05) # Update long_slope to change slope of DEM
+    spacing=0.1475, full_tire=False, long_slope=longitudinal_slope) # Update long_slope to change slope of DEM
 
 mg, z, road_flag, n =eg()
 
@@ -71,7 +85,7 @@ tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=5, \
 fa = FlowAccumulator(mg, surface='topographic__elevation', \
     flow_director="FlowDirectorD8", runoff_rate=1.538889e-6, \
     depression_finder="DepressionFinderAndRouter")
-oft = OverlandFlowTransporter(mg, tau_c=0.052)
+oft = OverlandFlowTransporter(mg, d50=d_50, tau_c=tau_c)
 
 #%% Run the model!
 mask = road_flag
@@ -199,9 +213,9 @@ for i in range(0, run_duration):
         rho_w=1000
         rho_s=2650
         g=9.81
-        slope=0.05
-        d50=1.8e-5
-        tau_c=0.052
+        slope=longitudinal_slope
+        d50=d_50 # originally 1.8e-5
+        tau_c=tau_c
         
         surface_water_discharge = mg.at_node['surface_water__discharge']
         channel_discharge = surface_water_discharge[mg.nodes[1:,1:9]].sum(axis=1).max()
@@ -210,7 +224,7 @@ for i in range(0, run_duration):
         for k in range(len(surface_water_discharge)):
             if surface_water_discharge[k] > 0 and road_flag[k] == 0:
                 mg.at_node['grain__roughness'][k] = 0.05
-                mg.at_node['total__roughness'][k] = 0.1 #this can change according to the treatment
+                mg.at_node['total__roughness'][k] = ditch_n #this can change according to the treatment
                 mg.at_node['shear_stress__partitioning'][k] = ((mg.at_node['grain__roughness'][k]) /\
                     (mg.at_node['total__roughness'][k]))**(24/13)
         
