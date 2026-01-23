@@ -7,111 +7,33 @@ import numpy as np
 from landlab import RasterModelGrid, imshow_grid
 from landlab.components import OverlandFlowTransporter, FlowAccumulator, TruckPassErosion
 np.set_printoptions(threshold=np.inf)
+from erodible_grid import Erodible_Grid
 
 #%%
 # Parameters
-run_duration = 10  # run duration, days
-seed = 1
+run_duration = 30  # run duration, days - shouldn't this be 90 days??
+seed = 4
 np.random.seed(seed)
 
-#%% Method for creating DEM
-def ErodibleGrid(nrows, ncols, spacing, full_tire, long_slope):
-    mg = RasterModelGrid((nrows,ncols),spacing)
-    z = mg.add_zeros('topographic__elevation', at='node') #create the topographic__elevation field
-    road_flag = mg.add_zeros('flag', at='node') #create a road_flag field for determining whether a 
-                                                #node is part of the road or the ditch line
-    n = mg.add_zeros('roughness', at='node') #create roughness field
-    
-    mg.set_fixed_value_boundaries_at_grid_edges(True, True, True, True)     
-    mg.set_closed_boundaries_at_grid_edges(False, False, False, False) 
-    
-    if full_tire == False: #When node spacing is half-tire-width
-        road_peak = 40 #peak crowning height occurs at this x-location
-        up = 0.0067 #rise of slope from ditchline to crown
-        down = 0.0067 #rise of slope from crown to fillslope
-        
-        for g in range(nrows): #loop through road length
-            elev = 0 #initialize elevation placeholder
-            flag = False #initialize road_flag placeholder
-            roughness = 0.1 #initialize roughness placeholder   
+Sa_ini = 0.005 # active depth in m
+longitudinal_slope = 0.125 # 12.5% for site BISH05
+ditch_n = 0.3
 
-            for h in range(ncols): #loop through road width
-                if h == 0 or h == 8:
-                    elev = 0
-                    flag = False
-                    roughness = 0.1
-                elif h == 1 or h == 7:
-                    elev = -0.109
-                    flag = False
-                    roughness = 0.1
-                elif h == 2 or h == 6:
-                    elev = -0.1875
-                    flag = False
-                    roughness = 0.1
-                elif h == 3 or h == 5:
-                    elev = -0.2344
-                    flag = False
-                    roughness = 0.1
-                elif h == 4:
-                    elev = -0.25
-                    flag = False
-                    roughness = 0.1
-                elif h <= road_peak and h > 8: #update latitudinal slopes based on location related to road_peak
-                    elev += up
-                    flag = True
-                    roughness = 0.05
-                else:
-                    elev -= down
-                    flag = True
-                    roughness = 0.05
+# options of d50 and corresponding tau_c
+d50_arr = [0.000018, 0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.001, 0.005]
+tauc_arr = [0.05244426, 0.1456785, 0.1780515, 0.19909395, 0.226611, 0.258984, 0.291357, 0.3625776, 0.453222, 0.5244426, 0.5989005, 3.6419625]
 
-                z[g*ncols + h] = elev #update elevation based on x & y locations
-                road_flag[g*ncols+h] = flag #update road_flag based on x & y locations
-                n[g*ncols + h] = roughness #update roughness values based on x & y locations
-    elif full_tire == True: #When node spacing is full-tire-width
-        road_peak = 20 #peak crowning height occurs at this x-location
-        up = 0.0134 #rise of slope from ditchline to crown
-        down = 0.0134 #rise of slope from crown to fillslope
-        
-        for g in range(nrows): #loop through road length
-            elev = 0 #initialize elevation placeholder
-            flag = False #initialize road_flag placeholder
-            roughness = 0.1 #initialize roughness placeholder
-
-            for h in range(ncols): #loop through road width
-                if h == 0 or h == 4:
-                    elev = 0
-                    flag = False
-                    roughness = 0.1
-                elif h == 1 or h == 3:
-                    elev = -0.1875
-                    flag = False
-                    roughness = 0.1
-                elif h == 2:
-                    elev = -0.25
-                    flag = False
-                    roughness = 0.1
-                elif h <= road_peak and h > 4: #update latitudinal slopes based on location related to road_peak
-                    elev += up
-                    flag = True
-                    roughness = 0.05
-                else:
-                    elev -= down
-                    flag = True
-                    roughness = 0.05
-
-                z[g*ncols + h] = elev #update elevation based on x & y locations
-                road_flag[g*ncols+h] = flag #update road_flag based on x & y locations
-                n[g*ncols + h] = roughness #update roughness values based on x & y locations
-    
-    z += mg.node_y*long_slope #add longitudinal slope to road segment
-    road_flag = road_flag.astype(bool) #Make sure road_flag is a boolean array
-                
-    return(mg, z, road_flag, n)          
+# index the desired d50 and tau_c values, or find d50 for the site and find tau_c from chart and input here
+# 0-11
+index = 2
+d_50 = d50_arr[index] # [m] ensure this value is changed in function files as well
+tau_c = tauc_arr[index] # tau_c dependent on d_50
 
 #%% Run method to create grid; add new fields
-mg, z, road_flag, n = ErodibleGrid(nrows=540, ncols=72,\
-    spacing=0.1475, full_tire=False, long_slope=0.05) # Update long_slope to change slope of DEM
+eg = Erodible_Grid(nrows=540, ncols=72,\
+    spacing=0.1475, full_tire=False, long_slope=longitudinal_slope) # Update long_slope to change slope of DEM
+
+mg, z, road_flag, n =eg()
 
 noise_amplitude=0.005
 road = road_flag==1
@@ -163,7 +85,7 @@ tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=5, \
 fa = FlowAccumulator(mg, surface='topographic__elevation', \
     flow_director="FlowDirectorD8", runoff_rate=1.538889e-6, \
     depression_finder="DepressionFinderAndRouter")
-oft = OverlandFlowTransporter(mg, tau_c=0.052)
+oft = OverlandFlowTransporter(mg, d50=d_50, tau_c=tau_c)
 
 #%% Run the model!
 mask = road_flag
@@ -179,7 +101,7 @@ sediment_outflux_channel = []
 sediment_influx_channel = []
 sediment_outflux_ruts = []
 channel_discharge_arr = []
-truck_num=0
+truck_num=0 # what is this?
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
 
 #%% Run the model!
@@ -225,9 +147,9 @@ for i in range(0, run_duration):
         intensity_arr.append(intensity)
         print(intensity)
 
-        mg.at_node['water__unit_flux_in'] = np.ones(540*72)*intensity*2.77778e-7
+        mg.at_node['water__unit_flux_in'] = np.ones(540*72)*intensity*2.77778e-7 # intensity converted to m/s
         fa.accumulate_flow()
-
+        
         #=================================Calculate overland flow transport=================================
         oft.run_one_step(dt)
 
@@ -249,51 +171,51 @@ for i in range(0, run_duration):
         plt.show()
 
         mg.add_field('dz_cum', dz_cum, at='node', units='m', clobber=True)
-        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
-        plt.xlabel('Road width (m)')
-        plt.ylabel('Road length (m)')
-        im = imshow_grid(mg,'dz_cum', var_name='Cumulative dz', var_units='m', 
-                     plot_name='Elevation change, t = %i days' %i,
-                     grid_units=('m','m'), cmap='RdBu', vmin=-0.0001, 
-                     vmax=0.0001, shrink=0.9)
-        plt.xlabel('Road width (m)')
-        plt.ylabel('Road length (m)')
-        plt.tight_layout()
-        # plt.savefig('output/dz_cum_%i_days.png' %i)
-        plt.show()
+        # fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
+        # plt.xlabel('Road width (m)')
+        # plt.ylabel('Road length (m)')
+        # im = imshow_grid(mg,'dz_cum', var_name='Cumulative dz', var_units='m', 
+        #              plot_name='Elevation change, t = %i days' %i,
+        #              grid_units=('m','m'), cmap='RdBu', vmin=-0.0001, 
+        #              vmax=0.0001, shrink=0.9)
+        # plt.xlabel('Road width (m)')
+        # plt.ylabel('Road length (m)')
+        # plt.tight_layout()
+        # # plt.savefig('output/dz_cum_%i_days.png' %i)
+        # plt.show()
 
-        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
-        plt.xlabel('Road width (m)')
-        plt.ylabel('Road length (m)')
-        im = imshow_grid(mg,'active__fines', var_name='Active fines', var_units='m', 
-                     plot_name='Fines depth, t = %i days' %i,
-                     grid_units=('m','m'), cmap='pink', vmin=0.002, 
-                     vmax=0.003)
-        plt.xlabel('Road width (m)')
-        plt.ylabel('Road length (m)')
-        plt.tight_layout()
-        # plt.savefig('output/dz_cum_%i_days.png' %i)
-        plt.show()
+        # fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
+        # plt.xlabel('Road width (m)')
+        # plt.ylabel('Road length (m)')
+        # im = imshow_grid(mg,'active__fines', var_name='Active fines', var_units='m', 
+        #              plot_name='Fines depth, t = %i days' %i,
+        #              grid_units=('m','m'), cmap='pink', vmin=0.002, 
+        #              vmax=0.003)
+        # plt.xlabel('Road width (m)')
+        # plt.ylabel('Road length (m)')
+        # plt.tight_layout()
+        # # plt.savefig('output/dz_cum_%i_days.png' %i)
+        # plt.show()
 
-        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
-        plt.xlabel('Road width (m)')
-        plt.ylabel('Road length (m)')
-        im = imshow_grid(mg,'active__depth', var_name='Active depth', var_units='m', 
-                     plot_name='Active depth, t = %i days' %i,
-                     grid_units=('m','m'), cmap='pink', vmin=0.0025, vmax=0.02)
-        plt.xlabel('Road width (m)')
-        plt.ylabel('Road length (m)')
-        plt.tight_layout()
-        # plt.savefig('output/dz_cum_%i_days.png' %i)
-        plt.show()
+        # fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
+        # plt.xlabel('Road width (m)')
+        # plt.ylabel('Road length (m)')
+        # im = imshow_grid(mg,'active__depth', var_name='Active depth', var_units='m', 
+        #              plot_name='Active depth, t = %i days' %i,
+        #              grid_units=('m','m'), cmap='pink', vmin=0.0025, vmax=0.02)
+        # plt.xlabel('Road width (m)')
+        # plt.ylabel('Road length (m)')
+        # plt.tight_layout()
+        # # plt.savefig('output/dz_cum_%i_days.png' %i)
+        # plt.show()
 
         #=================================Calculate channelized flow transport=================================
         rho_w=1000
         rho_s=2650
         g=9.81
-        slope=0.05
-        d50=1.8e-5
-        tau_c=0.052
+        slope=longitudinal_slope
+        d50=d_50 # originally 1.8e-5
+        tau_c=tau_c
         
         surface_water_discharge = mg.at_node['surface_water__discharge']
         channel_discharge = surface_water_discharge[mg.nodes[1:,1:9]].sum(axis=1).max()
@@ -302,7 +224,7 @@ for i in range(0, run_duration):
         for k in range(len(surface_water_discharge)):
             if surface_water_discharge[k] > 0 and road_flag[k] == 0:
                 mg.at_node['grain__roughness'][k] = 0.05
-                mg.at_node['total__roughness'][k] = 0.1 #this can change according to the treatment
+                mg.at_node['total__roughness'][k] = ditch_n #this can change according to the treatment
                 mg.at_node['shear_stress__partitioning'][k] = ((mg.at_node['grain__roughness'][k]) /\
                     (mg.at_node['total__roughness'][k]))**(24/13)
         
@@ -326,6 +248,19 @@ for i in range(0, run_duration):
     # ss_arr.append(ss)
     # sb = mg.at_node['ballast__depth'][mask].mean()-ballast_init[mask].mean()
     # sb_arr.append(sb)
+
+        # these are just tests to see what is happening after running the for loop
+        print("dt (days):", dt)
+        print("Sed flux (mean):", np.mean(mg.at_node['sediment__volume_outflux']))
+        print("Mass flux per day (kg):",
+          np.mean(mg.at_node['sediment__volume_outflux']) * rho_s * dt * 86400)
+        print("Slope range:", np.nanmin(mg.at_node['topographic__steepest_slope']),
+          np.nanmax(mg.at_node['topographic__steepest_slope']))
+        print("Receiver stats:", np.unique(mg.at_node['flow__receiver_node']).size)
+        print("Water depth range:", np.nanmin(mg.at_node['water__depth']),
+          np.nanmax(mg.at_node['water__depth']))
+        print("Discharge range:", np.nanmin(mg.at_node['surface_water__discharge']),
+          np.nanmax(mg.at_node['surface_water__discharge']))
 
 wall_time = time.time() - start
 print("Wall time for run:", wall_time, "s")
@@ -367,6 +302,9 @@ plt.xlim(0,run_duration)
 plt.show()
 
 #%%
+
+
+# we are using m3/s, dt in days, and kg/m3, so we should multiply by 86400, but that just makes it way higher! Seems to be addressed in OFT?
 sediment_mass = (np.array(sediment_influx_channel)*rho_s*dt_arr - (np.array(sediment_outflux_ruts)*rho_s*dt_arr) - \
     np.array(sediment_outflux_channel)*rho_s*dt_arr)
 
@@ -394,7 +332,7 @@ plt.show()
 
 #%%
 total_dz = np.abs(min(dz_arr_cum))
-total_dV = total_dz*0.1475*0.1475
+total_dV = total_dz*0.1475*0.1475 # change cell size, set automatically based on grid
 total_load = total_dV*2650
 total_load_div = total_load/2
 
