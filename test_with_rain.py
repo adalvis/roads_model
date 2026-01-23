@@ -19,6 +19,11 @@ seed = 1        # this isn't used to calculate rainfall, it ensures that anythin
                 # truck number in that file.
 np.random.seed(seed)
 
+# call parameters from .csv file
+parameters = pd.read_csv("parameters_WY2024.csv")
+# site=parameters.loc[parameters["Site Name"] == "KID13"].iloc[0]   # was also doing runs for this site
+site=parameters.loc[parameters["Site Name"] == "BISH05"].iloc[0]
+
 # constants
 rho_w=1000
 rho_s=2650
@@ -30,20 +35,18 @@ cell_area = cell_spacing**2
 nrows = 540 # number of rows in the grid
 ncols = 72  # number of columns in the grid
 
-parameters = pd.read_csv("parameters_WY2024.csv")
-# site=parameters.loc[parameters["Site Name"] == "KID13"].iloc[0]
-site=parameters.loc[parameters["Site Name"] == "BISH05"].iloc[0]
-
-# initialize average number of truck passes per day for truck pass erosion
-truck_num_ini = 4
-
+# initialize road layer depths
 Sa_ini = 0.01 # active depth in m
+Ss_ini = 0.23 # surfacing depth in m
+Sb_ini = 2    # ballast depth in m
+
 # longitudinal_slope = site["Road Gradient"]/100
 longitudinal_slope = 0.125
 porosity = 0.35
 
-# List of n values for ditch treatments:
-    # 
+# initialize average number of truck passes per day for truck pass erosion
+truck_num_ini = 4
+
 ditch_n = 0.7   # manning's roughness of the ditch, based on ditch BMP
 ditch_grain_n = 0.05 # manning's roughness for the grains in the ditch
 n_c = 0.03   
@@ -54,14 +57,12 @@ n_f = 0.015
 f_af = 0.25
 f_ac = 0.75
 
-# this d50 will replace the below indexing method once I make a column for corresponding tau_c in the parameters file
 # d50 = site["d50 (mm)"]/1000
 
 d50_arr = [0.000018, 0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.001, 0.005]
 tauc_arr = [0.05244426, 0.1456785, 0.1780515, 0.19909395, 0.226611, 0.258984, 0.291357, 0.3625776, 0.453222, 0.5244426, 0.5989005, 3.6419625]
 
 # index the desired d50 and tau_c values, or find d50 for the site and find tau_c from chart and input here
-# 0-11
 index = 3
 d50 = d50_arr[index] # [m] 
 tau_c = tauc_arr[index] # tau_c dependent on d_50
@@ -70,7 +71,7 @@ tau_c = tauc_arr[index] # tau_c dependent on d_50
 # Data load and rainfall site selection
 
 # to call high intensity
-high_intensity_index = 144
+high_intensity_index = 144  # day index determined to be the beginning of a high intensity rainfall period for this site. 
 
 # intensity data in mm/hr with dt from the dt document
 intensity_2024 = pd.read_csv("WY2024_RG_daily_intensity.csv")
@@ -99,8 +100,8 @@ z[road] += noise_amplitude * np.random.rand(
 
 #Add depth fields that will update in the component; these are the initial conditions
 mg.at_node['active__depth'] = np.ones(nrows*ncols)*Sa_ini #This is the most likely to change; the active layer is essentially 0.005 m right now.
-mg.at_node['surfacing__depth'] = np.ones(nrows*ncols)*0.23
-mg.at_node['ballast__depth'] = np.ones(nrows*ncols)*2.0 #This depth can technically be anything; it just needs to be much larger than the active layer and the surfacing layer depths.
+mg.at_node['surfacing__depth'] = np.ones(nrows*ncols)*Ss_ini
+mg.at_node['ballast__depth'] = np.ones(nrows*ncols)*Sb_ini #This depth can technically be anything; it just needs to be much larger than the active layer and the surfacing layer depths.
 
 #Add absolute elevation fields that will update based on z updates
 mg.at_node['active__elev'] = z
@@ -146,7 +147,7 @@ fa = FlowAccumulator(mg, surface='topographic__elevation', \
     flow_director="FlowDirectorD8", runoff_rate=1.538889e-6, \
     depression_finder=None)  # runoff rate = 1.538889e-6
 
-oft = OverlandFlowTransporter(mg, porosity=porosity, d50=d50, tau_c=tau_c, n_c=n_c, n_f=n_f,Sa_ini=Sa_ini)        # trying to run component with values we can change in this file
+oft = OverlandFlowTransporter(mg, porosity=porosity, d50=d50, longitudinal_slope = longitudinal_slope, tau_c=tau_c, n_c=n_c, n_f=n_f,Sa_ini=Sa_ini)        # trying to run component with values we can change in this file
 
 #%% Run the model!
 
@@ -163,10 +164,16 @@ sa_arr=[]
 ss_arr=[]
 sb_arr=[]
 
+# mask to exclude rut values from full road
+mask1 = np.ones(mg.number_of_nodes, dtype=bool)
+mask1[mg.nodes[1:, 9:41]] = False
+
+# depth averages for each layer in the ruts
 active_depth_ruts = []
 surfacing_depth_ruts = []
 ballast_depth_ruts = []
 
+# outflux and discharge arrays
 sediment_outflux_channel = []
 sediment_influx_channel = []
 sediment_outflux_ruts = []
@@ -191,6 +198,15 @@ water_depth_frames = []
 dz_cum_frames = []
 active_fines_frames = []
 active_depth_frames = []
+
+# shear stress partitioning coefficient averages
+fs_avg_ruts = []
+fs_avg_channel = []
+fs_avg_road = []
+
+# look at sediment rate of change for road vs ruts
+dzdt_avg_ruts = []
+dzdt_avg_road = []
 
 truck_num=0     
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
@@ -249,6 +265,15 @@ for i in range(0, run_duration):        # daily time step, every time step there
         avg_n_ruts.append(np.nanmean(mg.at_node['total__roughness'][mg.nodes[1:, 9:41]]))
         avg_n_channel.append(ditch_n)
         avg_n_road.append(np.nanmean(mg.at_node['total__roughness'][mg.nodes[1:, :]]))
+
+        # appedn shear stress partitioning coefficient
+        fs_avg_ruts.append(np.nanmean(mg.at_node['shear_stress__partitioning'][mg.nodes[1:, 9:41]]))
+        fs_avg_channel.append(0)
+        fs_avg_road.append(np.nanmean(mg.at_node['shear_stress__partitioning'][mg.nodes[1:,:]]))
+
+        # append sediment rate of change
+        dzdt_avg_ruts.append(np.nanmean(mg.at_node['sediment__rate_of_change'][mg.nodes[1:, 9:41]]))
+        dzdt_avg_road.append(np.nanmean(mg.at_node['sediment__rate_of_change'][mask1]))
 
         # append tpe loading
             # multiply change in layer thickness in the ruts by cell area*sediment density*1-porosity
@@ -358,13 +383,9 @@ for i in range(0, run_duration):        # daily time step, every time step there
         slope = mg.at_node['topographic__steepest_slope']
 
         print("ELEV min/max/any_nan/any_inf:", elev.min(), elev.max(), np.isnan(elev).any(), np.isinf(elev).any())
-
-        print(
-            "dzdt min/max:",
-            np.nanmin(oft._dzdt),
-            np.nanmax(oft._dzdt)
+        print("dzdt min/max:", np.nanmin(oft._dzdt), np.nanmax(oft._dzdt))
         # diagnostics end
-)
+        print("sediment outflux min/max:", np.nanmin(oft._sediment_outflux), np.nanmax(oft._sediment_outflux))
 
         #=================================Calculate channelized flow transport=================================
         slope=longitudinal_slope
@@ -377,7 +398,7 @@ for i in range(0, run_duration):        # daily time step, every time step there
         
         for k in range(len(surface_water_discharge)):
             if surface_water_discharge[k] > 0 and road_flag[k] == 0:
-                mg.at_node['grain__roughness'][k] = ditch_grain_n    # should this be altered? Grain roughness in the ditch is probably different
+                mg.at_node['grain__roughness'][k] = ditch_grain_n   
                 mg.at_node['total__roughness'][k] = ditch_n #this can change according to the treatment
                 mg.at_node['shear_stress__partitioning'][k] = ((mg.at_node['grain__roughness'][k]) /\
                     (mg.at_node['total__roughness'][k]))**(24/13)
@@ -385,7 +406,8 @@ for i in range(0, run_duration):        # daily time step, every time step there
         
         R = ((mg.at_node['total__roughness'][mg.nodes[1:,1:9]].max()*channel_discharge)/\
             (np.sqrt(6*slope/0.718)))**(6/13)       # indexing all rows except the top and columns 1:9
-                
+
+        # calculates effective shear stress
         shear_stress = rho_w*g*R*slope*mg.at_node['shear_stress__partitioning'][mg.nodes[1:,1:9]]
 
         if shear_stress.max() > tau_c:
@@ -399,21 +421,29 @@ for i in range(0, run_duration):        # daily time step, every time step there
         sediment_outflux_ruts.append((mg.at_node["sediment__volume_influx"][mg.nodes[1,9:41]]).sum())   # indexing the second from the top row, and the columns of the ruts
         sediment_influx_channel.append((mg.at_node["sediment__volume_influx"][mg.nodes[1:,8]]).sum())   # indexing all rows except the top and column 8, edge of road
 
-        # append shear stress vectors
-        mg.at_node['shear_stress'] = oft._shear_stress
-        avg_shear_stress_ruts.append(np.nanmean(mg.at_node['shear_stress'][mg.nodes[1:,9:41]])) # mean of the oft calculated shear stress for the ruts
+        # append effective shear stress vectors
+        mg.at_node['shear_stress'] = oft._shear_stress  # effective shear stress
+        avg_shear_stress_ruts.append(np.nanmean(mg.at_node['shear_stress'][mg.nodes[1:,9:41]])) # mean of the oft calculated effective shear stress for the ruts
         # need to add calculation for channel
-        avg_shear_stress_channel.append(np.nanmean(shear_stress))    # appending channel shear stress with above shear stress calc for mg.nodes[1:, 1:9]
-        avg_shear_stress_road.append(np.nanmean(mg.at_node['shear_stress'][mg.nodes[1:, :]]))      # full road average of shear stress
+        avg_shear_stress_channel.append(np.nanmean(shear_stress))    # appending channel effective shear stress with above effective shear stress calc for mg.nodes[1:, 1:9]
+        avg_shear_stress_road.append(np.nanmean(mg.at_node['shear_stress'][mg.nodes[1:, :]]))      # full road average of effective shear stress
 
         # append manning's n vectors
         avg_n_ruts.append(np.nanmean(mg.at_node['total__roughness'][mg.nodes[1:, 9:41]]))
         avg_n_channel.append(ditch_n)
         avg_n_road.append(np.nanmean(mg.at_node['total__roughness'][mg.nodes[1:, :]]))
 
+        # append shear stress partitioning coefficient vectors        
+        fs_avg_ruts.append(np.nanmean(mg.at_node['shear_stress__partitioning'][mg.nodes[1:, 9:41]]))
+        fs_avg_channel.append(0)    # unsure on this one
+        fs_avg_road.append(np.nanmean(mg.at_node['shear_stress__partitioning'][mg.nodes[1:,:]]))
+        
         # append tpe loading
         tpe_load_ruts.append((np.multiply(tpe._active_dz[mg.nodes[1:, 9:41]], cell_area*rho_s*(1-porosity))).sum())
-
+        
+        # append sediment rate of change
+        dzdt_avg_ruts.append(np.nanmean(mg.at_node['sediment__rate_of_change'][mg.nodes[1:, 9:41]]))
+        dzdt_avg_road.append(np.nanmean(mg.at_node['sediment__rate_of_change'][mask1]))
     # cumulative tpe load in the ruts over time
     tpe_load_ruts_cum = np.cumsum(tpe_load_ruts)
 
@@ -638,12 +668,21 @@ plt.show()
 
 #%% shear stress plots
 
+# plot shear stress partitioning coefficient over time
+plt.plot(range(0,run_duration), fs_avg_road, label='Full Road')
+plt.plot(range(0,run_duration), fs_avg_ruts, label='Ruts')
+plt.xlabel('Day')
+plt.ylabel('Average Shear Stress Partitioning \nCoefficient in the Ruts: f_s')
+plt.xlim(0,run_duration)
+plt.legend()
+plt.show()
+
 # plot average shear stresses on the road
 plt.plot(range(0,run_duration), avg_shear_stress_road, label = 'Full Road')
 plt.plot(range(0,run_duration), avg_shear_stress_ruts, label = 'Ruts')
 plt.axhline(tau_c, linestyle='--', color='gray', label='Critical Shear Stress Threshold')
 plt.xlabel('Day')
-plt.ylabel('Road - Average Shear Stress [$Pa$]')
+plt.ylabel('Road - Average Effective Shear Stress [$Pa$]')
 plt.xlim(0,run_duration)
 plt.legend()
 plt.show()
@@ -652,7 +691,7 @@ plt.show()
 plt.plot(range(0,run_duration), avg_shear_stress_channel, label = 'Ditch')
 plt.axhline(tau_c, linestyle='--', color='gray', label='Critical Shear Stress Threshold')
 plt.xlabel('Day')
-plt.ylabel('Ditch - Average Shear Stress [$Pa$]')
+plt.ylabel('Ditch - Average Effective Shear Stress [$Pa$]')
 plt.xlim(0,run_duration)
 plt.legend()
 plt.show()
@@ -677,6 +716,19 @@ plt.ylabel("Ditch - Average Manning's Roughness")
 plt.xlim(0,run_duration)
 plt.legend()
 plt.show()
+
+#%% sediment rate of change check
+plt.plot(range(0,run_duration), dzdt_avg_road)
+plt.xlabel('Day')
+plt.ylabel('average dzdt per time step in the road excluding ruts')
+plt.xlim(0,run_duration)
+plt.show()
+
+plt.plot(range(0,run_duration), dzdt_avg_ruts)
+plt.xlabel('Day')
+plt.ylabel('average dzdt per time step in the ruts only')
+plt.xlim(0,run_duration)
+plt.show()
 #%% layer thickness plots
 
 # plot average active layer thickness over time in the ruts
@@ -686,19 +738,23 @@ plt.ylabel('Active Depth in ruts [$m$]')
 plt.xlim(0,run_duration)
 plt.show()
 
-# plot average surfacing layer thickness over time in the ruts
-plt.plot(range(0,run_duration), surfacing_depth_ruts)
-plt.xlabel('Day')
-plt.ylabel('Surfacing Depth in ruts [$m$]')
-plt.xlim(0,run_duration)
-plt.show()
+# these have been a bit unnecessary to plot because they are relatively unchanging.
+# they lose on the order of 1e-7 m per day of thickness due to TPE processes only.
+# if truck_num is varied then these plots will provide more meaning.
 
-# plot average ballast layer thickness over time in the ruts
-plt.plot(range(0,run_duration), ballast_depth_ruts)
-plt.xlabel('Day')
-plt.ylabel('Ballast Depth in ruts [$m$]')
-plt.xlim(0,run_duration)
-plt.show()
+# # plot average surfacing layer thickness over time in the ruts
+# plt.plot(range(0,run_duration), surfacing_depth_ruts)
+# plt.xlabel('Day')
+# plt.ylabel('Surfacing Depth in ruts [$m$]')
+# plt.xlim(0,run_duration)
+# plt.show()
+
+# # plot average ballast layer thickness over time in the ruts
+# plt.plot(range(0,run_duration), ballast_depth_ruts)
+# plt.xlabel('Day')
+# plt.ylabel('Ballast Depth in ruts [$m$]')
+# plt.xlim(0,run_duration)
+# plt.show()
 
 #%% prints
 
