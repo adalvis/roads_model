@@ -144,7 +144,7 @@ fa = FlowAccumulator(mg, surface='topographic__elevation', \
     depression_finder=None)  # runoff rate = 1.538889e-6
 
 oft = OverlandFlowTransporter(mg, porosity=porosity, d50=d50, \
-    longitudinal_slope = longitudinal_slope, tau_c=tau_c, n_c=n_c, n_f=n_f)        # trying to run component with values we can change in this file
+    longitudinal_slope=longitudinal_slope, tau_c=tau_c, n_c=n_c, n_f=n_f)        # trying to run component with values we can change in this file
 
 #%% Run the model!
 
@@ -342,18 +342,19 @@ for i in range(0, run_duration):        # daily time step, every time step there
         # # plt.savefig('output/Q_%i_days.png' %i)
         # plt.show()
 
-        # mg.add_field('dz_cum', dz_cum, at='node', units='m', clobber=True)
-        # fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
-        # plt.xlabel('Road width (m)')
-        # plt.ylabel('Road length (m)')
-        # im = imshow_grid(mg,'dz_cum', var_name='Cumulative dz', var_units='m', 
-        #              plot_name='Elevation change, t = %i days' %i,
-        #              grid_units=('m','m'), cmap='RdBu', vmin=-0.001, 
-        #              vmax=0.001, shrink=0.9)
-        # plt.xlabel('Road width (m)')
-        # plt.ylabel('Road length (m)')
-        # plt.tight_layout()
-        # # plt.savefig('output/dz_cum_%i_days.png' %i)
+        mg.add_field('dz_cum', dz_cum, at='node', units='m', clobber=True)
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+        im = imshow_grid(mg,'dz_cum', var_name='Cumulative dz', var_units='m', 
+                     plot_name='Elevation change, t = %i days' %i,
+                     grid_units=('m','m'), cmap='RdBu', vmin=-0.001, 
+                     vmax=0.001, shrink=0.9)
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+        plt.tight_layout()
+        plt.savefig('output/dz_cum_%i_days.png' %i)
+        plt.close()
         # plt.show()
 
         # fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
@@ -381,16 +382,6 @@ for i in range(0, run_duration):        # daily time step, every time step there
         # # plt.savefig('output/dz_cum_%i_days.png' %i)
         # plt.show()
 
-        # # for future slider plots
-        # water_depth_frames.append(
-        #     mg.at_node["water__depth"].copy())
-        # dz_cum_frames.append(
-        #     dz_cum.copy())
-        # active_fines_frames.append(
-        #     mg.at_node["active__fines"].copy())
-        # active_depth_frames.append(
-        #     mg.at_node["active__depth"].copy())
-
         # diagnostic prints
         slope1 = mg.at_node['topographic__steepest_slope']
         water_depth = mg.at_node['water__depth']
@@ -413,7 +404,7 @@ for i in range(0, run_duration):        # daily time step, every time step there
         tau_c=tau_c
         
         surface_water_discharge = mg.at_node['surface_water__discharge']
-        channel_discharge = surface_water_discharge[ditch].sum(axis=0).max()
+        channel_discharge = surface_water_discharge[ditch].sum(axis=1).max()
         channel_discharge_arr.append(channel_discharge)
         
         for k in range(len(surface_water_discharge)):
@@ -430,7 +421,8 @@ for i in range(0, run_duration):        # daily time step, every time step there
         shear_stress = rho_w*g*R*slope*mg.at_node['shear_stress__partitioning'][ditch]
 
         if np.nanmax(shear_stress) > tau_c:
-            sediment_outflux = (((10**(-4.348))/(rho_s*((d50)**(0.811))))\
+            sediment_outflux = (((10**(-4.348))/
+                (rho_s*((d50)**(0.811))))\
                 *(np.nanmax(shear_stress)-tau_c)**(2.457))*np.sqrt((6/0.718)*R)#[m^3/s]
         else:
             sediment_outflux=0
@@ -484,20 +476,28 @@ import glob
 path = "output/"
 images_w=[]
 images_Q=[]
+images_dz=[]
 for file in glob.glob(path+'w*.png'):
     images_w.append(file)
 for file in glob.glob(path+'Q*.png'):
     images_Q.append(file)
+for file in glob.glob(path+'dz_cum*.png'):
+    images_dz.append(file)
 
 def number(filename):
     return int(filename[9:-9])
 
+def num(filename):
+    return int(filename[14:-9])
+
 images_w = sorted(images_w, key=number)
 images_Q = sorted(images_Q, key=number)
+images_dz= sorted(images_dz, key=num)
 
 # Create a list of image objects
 image_list_w = [Image.open(file) for file in images_w]
 image_list_Q = [Image.open(file) for file in images_Q]
+image_list_dz = [Image.open(file) for file in images_dz]
 
 # Save the first image as a GIF file
 image_list_w[0].save(
@@ -511,6 +511,13 @@ image_list_Q[0].save(
             'discharge.gif',
             save_all=True,
             append_images=image_list_Q[1:], # append rest of the images
+            duration=1000, # in milliseconds
+            loop=0)
+
+image_list_dz[0].save(
+            'dz_cum.gif',
+            save_all=True,
+            append_images=image_list_dz[1:], # append rest of the images
             duration=1000, # in milliseconds
             loop=0)
 #%% Rainfall plots
@@ -777,25 +784,3 @@ print(
     'Cumulative sediment flux from road & ditch:', (np.array(sediment_outflux_channel)*rho_s*dt_arr_secs).sum()\
     +(np.array(sediment_outflux_ruts)*rho_s*dt_arr_secs).sum(), 'kg'
     )
-
-
-#%%
-# plt.plot(range(0,run_duration), np.multiply(sa_arr, 1000).cumsum())
-# plt.xlabel('Day')
-# plt.ylabel('Road active layer depth [mm]')
-# plt.xlim(0,run_duration)
-# # plt.ylim(19.95,20)
-# plt.show()
-
-# plt.plot(range(0,run_duration), np.array(ss_arr).cumsum())
-# plt.xlabel('Day')
-# plt.ylabel('Road surfacing layer depth [m]')
-# plt.xlim(0,run_duration)
-# plt.show()
-
-# plt.plot(range(0,run_duration), np.array(sb_arr).cumsum())
-# plt.xlabel('Day')
-# plt.ylabel('Road ballast layer depth [m]')
-# plt.xlim(0,run_duration)
-# plt.show()
-# %%
