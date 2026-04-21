@@ -1,5 +1,5 @@
 # WADNR Roads Project Distributed Model
-**Updated:** 09/24/2025
+**Updated:** 04/21/2026
 
 ## Summary
 This repository contains drivers for testing and tutorials for learning the distributed roads 
@@ -26,52 +26,67 @@ Routes flow over the forest road surface. Which component is chosen depends on
 the timestep of rainfall/runoff being fed to the model. `FlowAccumulator` works
 best for a coarser timestep, whereas `KinwaveImplicitOverlandFlow` works best for
 a finer timestep. However, `FlowAccumulator` is a much faster flow router than
-`KinwaveImplicitOverlandFlow`.
+`KinwaveImplicitOverlandFlow`. In the most recent iteration of the distributed model,
+we use `FlowAccumulator`.
 
-### Third component: `FastscapeEroder`
+### Third component (archive): `FastscapeEroder`
 Erodes the landscape based on a stream power framework. The erosion of each node is 
 based on an erosivity value, the contributing drainage area (or flow, depending on 
-how the component is initialized), and the slope.
-A future iteration of this spatially distributed model will use a different erosion
-component based on slightly different variables (such as roughness).
+how the component is initialized), and the slope. This was used in the initial iteration
+of the distributed model.
 
-### Third component (update): `OverlandFlowTransporter`
+### Third component (current): `OverlandFlowTransporter`
 Erodes a surface with shallow overland flow using physics-based formulations for 
 entrainment and transport that can directly use sediment size distribution and surface 
 roughness. The sediment transport rate is calculated using Govers' equation (1992) 
 with shear stress partitioning
+ 
+## `roads_model` repository navigation
 
-## Repository navigation
-### `Main folder`
+- ### Folder: `archive`
+   -  #### Folder: `tutorials`
+      - `TruckPassErosion_tutorial.ipynb` is a Jupyter notebook that demonstrates the utility
+      of the newly developed `TruckPassErosion` component.
+      together.
+         - **Input:** Model parameters.
+         - **Output:** Plots of road layer cross sections and road surface.
+      - `FlowRouting_tutorial.ipynb` is a Jupyter notebook that demonstrates how to use either
+      `FlowAccumulator` or `KinwaveImplicitOverlandFlow`.
+         - **Input:** A pre-rutted grid (`rutted_grid.grid`).
+         - **Output:** Maps of surface water discharge.
+      - `FullModel_tutorial.ipynb` is a Jupyter notebook that demonstrates how to run the full
+      distributed model (including `FastscapeEroder`).
+         - **Input:** Necessary model parameters.
+         - **Output:** Maps of surface water discharge, plots of average road layer depths vs. time,
+         and erosion vs. time.
+   -  `fse_stochasticRainfall.py` is a Python script of the distributed model driver that
+      uses `FastscapeEroder` and a stochastically generated rainfall dataset.
+   - `oft_rainfallData_old.ipynb` is a Jupyter notebook with the distributed model driver
+      that uses `OverlandFlowTransporter` and a rainfall dataset from the field.
+   - `oft_rainfallData_old.py` is a Python script with the distributed model driver that
+      uses `OverlandFlowTransporter` and a rainfall dataset from the field.
+   - `oft_stochasticRainfall_old.py` is a Python script of the distributed model driver that 
+      uses `OverlandFlowTransporter` and a stochastically generated rainfall dataset.
+   
+- ### Folder: `input`
+   - `parameters_WY2024.csv` contains important field site parameter values (e.g., slope, BMP)
+      for WY2024.
+   - `WY2024_RG_daily_dt.csv` contains the daily storm duration in hours for WY2024
+      at every rain gauge.
+   - `WY2024_RG_daily_intensity.csv` contains the daily storm intensity in mm/hr for WY2024
+      at every rain gauge.
 
-1. `test_driver.py` is a script used to test the model components (`TruckPassErosion`, 
-`FlowAccumulator`, `FastscapeEroder`) and how they work together.
-   - **Input:** Model parameters.
-   - **Output:** Plots of average road layer depths vs. time and erosion vs. time.
+- ### Folder: `utilities`
+   - `erodible_grid.py` is a Python script used to create the synthetic road surface used
+      in the model.
+   - `group_rainfall.py` is a utilitarian script used to aggregate hourly rainfall into daily
+   rainfall.
+      - **Input:** Hourly rainfall data.
+      - **Output:** Aggregated daily rainfall data.
 
-2. `test.py` is a script used to test the model components (`TruckPassErosion`, 
-`FlowAccumulator`, `OverlandFlowTransporter`) and how they work together.
+- `oft_rainfallData.ipynb` is a Jupyter notebook that contains the main model driver and is used 
+   to test the model components (`TruckPassErosion`, `FlowAccumulator`, `OverlandFlowTransporter`) 
+   and how they work together.
    - **Input:** Model parameters.
    - **Output:** Sediment load from road and ditch line, as well as a number of plots
    demonstrating different outputs from the model.
-
-3. `group_rainfall.py` is a utilitarian script used to aggregate hourly rainfall into daily
-rainfall.
-   - **Input:** Hourly rainfall data.
-   - **Output:** Aggregated daily rainfall data.
-
-### `tutorials`
-1. `TruckPassErosion_tutorial.ipynb` is a Jupyter notebook that demonstrates the utility
-of the newly developed `TruckPassErosion` component.
-together.
-   - **Input:** Model parameters.
-   - **Output:** Plots of road layer cross sections and road surface.
-2. `FlowRouting_tutorial.ipynb` is a Jupyter notebook that demonstrates how to use either
-`FlowAccumulator` or `KinwaveImplicitOverlandFlow`.
-   - **Input:** A pre-rutted grid (`rutted_grid.grid`).
-   - **Output:** Maps of surface water discharge.
-3. `FullModel_tutorial.ipynb` is a Jupyter notebook that demonstrates how to run the full
-distributed model (including `FastscapeEroder`).
-   - **Input:** Necessary model parameters.
-   - **Output:** Maps of surface water discharge, plots of average road layer depths vs. time,
-    and erosion vs. time.
