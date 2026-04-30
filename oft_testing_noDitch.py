@@ -26,12 +26,12 @@ site = parameters.loc[parameters["Site Name"] == site_name].iloc[0]
 # to call high intensity
 high_intensity_index = 144  # day index determined to be the beginning of a high intensity rainfall period for this site. 
 
-seed = 42 
+seed = 1 
 np.random.seed(seed)
 
 # intensity data in mm/hr with dt from the dt document
 # intensity = pd.read_csv("input/WY2024_RG_daily_intensity.csv")
-intensity = np.random.choice([0,4],size=(90),p=[0.4,0.6])
+intensity = np.random.choice([0,4],size=(run_duration),p=[0.4,0.6])
 
 # change the site name and index values to get different sites and dates
 # intensity_90 = intensity[rain_gauge].iloc[high_intensity_index:].values
@@ -117,14 +117,9 @@ ball_depth = mg.add_ones('ballast__depth', at='node')
 ball_depth *= Sb_ini
 
 # %%
-# ruts = [mg.nodes[1:-1, 26:40], mg.nodes[1:-1, 41:55]]
-# half_road = mg.nodes[1:-1, 9:41]
-# full_road = mg.nodes[1:-1, 9:72]
-# ditch = mg.nodes[1:-1, 1:9]
-
-ruts = [mg.nodes[1:-1, 26-8:40-8], mg.nodes[1:-1, 41-8:55-8]]
-half_road = mg.nodes[1:-1, 0:32]
-full_road = mg.nodes[1:-1, 0:64]
+ruts = [mg.nodes[:, 26-9:40-9], mg.nodes[:, 41-9:55-9]]
+half_road = mg.nodes[:, 0:33]
+full_road = mg.nodes[:, 0:64]
 
 # %%
 # Set up the figure.
@@ -154,10 +149,8 @@ X = mg.node_x.reshape(mg.shape)
 Y = mg.node_y.reshape(mg.shape)
 Z = z.reshape(mg.shape)
 
-xsec_pre = mg.at_node['topographic__elevation'][mg.nodes[50,:].flatten()].copy() #half tire width
-xsec_surf_pre = mg.at_node['surfacing__elevation'][mg.nodes[50,:].flatten()].copy()
-
-
+xsec_pre = mg.at_node['topographic__elevation'][mg.nodes[100,:].flatten()].copy() #half tire width
+xsec_surf_pre = mg.at_node['surfacing__elevation'][mg.nodes[100,:].flatten()].copy()
 
 # %%
 # prep fields
@@ -214,6 +207,9 @@ dzdt_avg_road = []
 
 truck_num=0     
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
+active_init = mg.at_node['active__depth'][full_road].copy()
+surfacing_init = mg.at_node['surfacing__depth'][full_road].copy()
+ballast_init = mg.at_node['ballast__depth'][full_road].copy()
 
 
 # %%
@@ -298,12 +294,9 @@ plt.show()
 
 # %%
 # Main loop
-
 start = time.time()
 for i in range(0, run_duration): # daily time step
-    active_init = mg.at_node['active__depth'].copy()
-    surfacing_init = mg.at_node['surfacing__depth'].copy()
-    ballast_init = mg.at_node['ballast__depth'].copy()
+    
     z_ini = mg.at_node['topographic__elevation'].copy()
 
     tpe.run_one_step()
@@ -375,10 +368,10 @@ for i in range(0, run_duration): # daily time step
             fa.accumulate_flow()
             oft.run_one_step(dt_frac)
 
-            mass_rut_outflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[1,0:32]]).sum()*rho_s*dt_frac*86400
-            mass_ditch_inflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[1:-1,0]]).sum()*rho_s*dt_frac*86400
-            mass_fillslope_inflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[1:-1,63]]).sum()*rho_s*dt_frac*86400
-            mass_fillslope_rut_outflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[1,32:63]]).sum()*rho_s*dt_frac*86400
+            mass_rut_outflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[0,0:33]]).sum()*rho_s*dt_frac*86400
+            mass_ditch_inflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[:,0]]).sum()*rho_s*dt_frac*86400
+            mass_fillslope_inflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[:,63]]).sum()*rho_s*dt_frac*86400
+            mass_fillslope_rut_outflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[0,33:64]]).sum()*rho_s*dt_frac*86400
             # print("Ditch Inflow, Time Step:", mass_ditch_inflow_i)
 
             mass_rut_outflow[i] += mass_rut_outflow_i
@@ -513,7 +506,8 @@ for i in range(0, run_duration): # daily time step
         # append sediment rate of change
         dzdt_avg_ruts.append(np.nanmean(mg.at_node['sediment__rate_of_change'][ruts]))
         dzdt_avg_road.append(np.nanmean(mg.at_node['sediment__rate_of_change'][mask1]))
-
+    print("change in sum of depths:", active_init.sum()+surfacing_init.sum()+ballast_init.sum() - (sa_arr[i]+ss_arr[i]+sb_arr[i]))
+    print("change in z from OFT:", np.divide(total_road_mass.cumsum()[i], cell_area*rho_s*(1-porosity)))
 wall_time = time.time() - start
 print("Wall time for run:", wall_time, "s")
 
@@ -594,9 +588,9 @@ image_list_dz[0].save(
             loop=0)
 
 # %%
-xsec_active = mg.at_node['topographic__elevation'][mg.nodes[50,:].flatten()]
-xsec_surf =  mg.at_node['surfacing__elevation'][mg.nodes[50,:].flatten()] 
-xsec_ball = mg.at_node['ballast__elevation'][mg.nodes[50,:].flatten()]
+xsec_active = mg.at_node['topographic__elevation'][mg.nodes[100,:].flatten()]
+xsec_surf =  mg.at_node['surfacing__elevation'][mg.nodes[100,:].flatten()] 
+xsec_ball = mg.at_node['ballast__elevation'][mg.nodes[100,:].flatten()]
 
 plt.figure(figsize=(8,3), layout='tight')
 plt.plot(X[36], xsec_pre, color='gray', linestyle='-.', label='Before')
