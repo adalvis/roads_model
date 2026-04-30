@@ -25,7 +25,7 @@ class Erodible_Grid(Component):
                                                         #node is part of the road or the ditch line
         n = mg.add_zeros('roughness', at='node') #create roughness field
             
-        # mg.set_open_boundaries_at_grid_edges(True, True, True, True)     
+        mg.set_fixed_value_boundaries_at_grid_edges(True, True, True, True)     
         mg.set_closed_boundaries_at_grid_edges(False, False, False, False) 
 
         if full_tire == False: #When node spacing is half-tire-width
@@ -62,7 +62,7 @@ class Erodible_Grid(Component):
                             flag = True
                         z[g*ncols + h] = elev #update elevation based on x & y locations
                         road_flag[g*ncols+h] = flag #update road_flag based on x & y locations
-                else:
+                elif ditch==False:
                     for h in range(ncols):
                         if h <= road_peak:
                             elev += up
