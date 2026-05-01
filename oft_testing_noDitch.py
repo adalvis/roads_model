@@ -9,71 +9,59 @@ from landlab import RasterModelGrid, imshow_grid
 from landlab.components import OverlandFlowTransporter, FlowAccumulator, TruckPassErosion, DepressionFinderAndRouter
 np.set_printoptions(threshold=np.inf)
 from utilities.erodible_grid import Erodible_Grid
-# %%
-# Parameters
-run_duration = 90  # run duration = days + 1
 
+# %% Define parameters
+run_duration = 90 
+
+#Physical constants
+rho_w=1000
+rho_s=2650
+g=9.81
+
+#Define site
 site_name = "MEL05"
 rain_gauge_list = ["RG_BISH05_mm","RG_BISH12_mm","RG_DEL0103_mm",\
     "RG_KID1316_mm","RG_KID46_mm","RG_MEL05_mm","RG_MEL14_mm",\
     "RG_NASE0104_mm","RG_NASE05i_mm","RG_NEWS1920_mm"]
 rain_gauge = rain_gauge_list[5]
 
-# call parameters from .csv file
+#Call parameters from .csv file
 parameters = pd.read_csv("input/parameters_WY2024.csv")
-site = parameters.loc[parameters["Site Name"] == site_name].iloc[0]
+site_params = parameters.loc[parameters["Site Name"] == site_name].iloc[0]
+S = site_params["Road Gradient"]/100
+porosity = 0.35
 
-# to call high intensity
-high_intensity_index = 144  # day index determined to be the beginning of a high intensity rainfall period for this site. 
+#Define index to start model run from
+intensity_index = 144
 
 seed = 1 
 np.random.seed(seed)
 
-# intensity data in mm/hr with dt from the dt document
+#Intensity data in mm/hr
 # intensity = pd.read_csv("input/WY2024_RG_daily_intensity.csv")
 intensity = np.random.choice([0,4],size=(run_duration),p=[0.4,0.6])
 
-# change the site name and index values to get different sites and dates
-# intensity_90 = intensity[rain_gauge].iloc[high_intensity_index:].values
+#Change the site name and index values to get different sites and dates
+# intensity_90 = intensity[rain_gauge].iloc[intensity_index:].values
 intensity_90 = intensity.copy()
 
-# daily dt in hours
+#Daily storm duration in hours
 # dt_hours = pd.read_csv("input/WY2024_RG_daily_dt.csv")
+# dt_hours_90 = dt_hours[rain_gauge].iloc[high_intensity_index:].values 
 dt_hours = np.array([4 if x==4 else 0 for x in intensity])
-# dt_hours_90 = dt_hours[rain_gauge].iloc[high_intensity_index:].values  
 dt_hours_90 = dt_hours.copy()
-# convert to dt to days
+#Convert to dt to days
 dt = np.array(dt_hours_90)/24
-
-# constants
-rho_w=1000
-rho_s=2650
-g=9.81
-
-# grid creation
-cell_spacing = 0.1475 # cell width or length dimension in meters
-cell_area = cell_spacing**2
-nrows = 540 # number of rows in the grid
-ncols = 64  # number of columns in the grid (NO DITCH)
 
 # initialize road layer depths
 Sa_ini = 0.01 # active depth in m
 Ss_ini = 0.23 # surfacing depth in m
 Sb_ini = 2    # ballast depth in m
 
-S = site["Road Gradient"]/100
-porosity = 0.35
-
-# initialize average number of truck passes per day for truck pass erosion
+#Initialize average number of truck passes per day for truck pass erosion
 truck_num_ini = 4
 
-#We're using half tire width for node spacing
-center = 32
-half_width = 7 
-full_tire = False
-
-ditch_n = 0.05   # manning's roughness of the ditch, based on ditch BMP
-ditch_grain_n = 0.05 # manning's roughness for the grains in the ditch
+#Define roughness values for fine and coarse material
 n_c = 0.05   
 n_f = 0.015
 
@@ -81,18 +69,23 @@ n_f = 0.015
 f_af = 0.75
 f_ac = 0.25
 
-d50_arr = [0.0001, 0.001]
-tauc_arr = [0.146, 2.88]
+#Define d50 and tau_c
+d50_road = 0.0001 # [m] 
+tau_c_road = 0.146
 
-# index the desired d50 and tau_c values, or find d50 for the site and find tau_c from chart and input here
-index_road = 0
-index_ditch = 1
-d50_road = d50_arr[index_road] # [m] 
-d50_ditch = d50_arr[index_ditch]
-tau_c_road = tauc_arr[index_road]
-tau_c_ditch = tauc_arr[index_ditch]
+# %% Create the grid, add random noise, add fields
 
-# %%
+#Parameters for grid creation
+cell_spacing = 0.1475 # cell width or length dimension in meters
+cell_area = cell_spacing**2
+nrows = 540 # number of rows in the grid
+ncols = 64  # number of columns in the grid (NO DITCH)
+
+#We're using half tire width for node spacing
+center = 32
+half_width = 7 
+full_tire = False
+
 eg = Erodible_Grid(nrows=nrows, ncols=ncols,\
     spacing=cell_spacing, full_tire=full_tire, long_slope=S,road_peak=center,ditch=False)
 
@@ -116,13 +109,12 @@ surf_depth *= Ss_ini
 ball_depth = mg.add_ones('ballast__depth', at='node')
 ball_depth *= Sb_ini
 
-# %%
+# %% Pre-define location indices
 ruts = [mg.nodes[:, 26-9:40-9], mg.nodes[:, 41-9:55-9]]
 half_road = mg.nodes[:, 0:33]
 full_road = mg.nodes[:, 0:64]
 
-# %%
-# Set up the figure.
+# %% DEM plot
 fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
 imshow_grid(mg, z, plot_name='Synthetic road', var_name='Elevation', var_units='m',\
     grid_units=('m', 'm'), cmap='terrain', color_for_closed='black', vmin=0, vmax=5)
@@ -131,55 +123,33 @@ plt.ylabel('Road length (m)')
 plt.tight_layout()
 plt.show()
 
-# %%
-tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=truck_num_ini, \
-    scat_loss=8e-5, f_af=f_af, f_ac=f_ac) #initialize component, 
-
-df_init = DepressionFinderAndRouter(mg, reroute_flow = True)
-df_init.map_depressions()
-
-fa = FlowAccumulator(mg, surface='topographic__elevation', \
-    flow_director="FlowDirectorD8", runoff_rate=1.538889e-6,)
-
-oft = OverlandFlowTransporter(mg, porosity=porosity, d50=d50_road, \
-    longitudinal_slope=S, tau_c=tau_c_road, n_c=n_c, n_f=n_f)
-
-# %%
+# %% Save some pre-run variables for comparison later
 X = mg.node_x.reshape(mg.shape)
 Y = mg.node_y.reshape(mg.shape)
 Z = z.reshape(mg.shape)
 
-xsec_pre = mg.at_node['topographic__elevation'][mg.nodes[100,:].flatten()].copy() #half tire width
-xsec_surf_pre = mg.at_node['surfacing__elevation'][mg.nodes[100,:].flatten()].copy()
-
-# %%
-# prep fields
+xsec_pre = mg.at_node['topographic__elevation'][mg.nodes[100,:].flatten()].copy()
+# %% Prep arrays/lists
 mask = road_flag
 intensity_arr=[]
 dt_arr = []
 dz_arr=[]
 dz_arr_cum = []
 
-# mask to exclude rut values from full road
-mask1 = np.ones(mg.number_of_nodes, dtype=bool)
-mask1[ruts] = False
-
-# depths for each layer
+#Depths for each layer
 sa_arr = np.zeros(run_duration)
 ss_arr = np.zeros(run_duration)
 sb_arr = np.zeros(run_duration)
 
-# outflux and discharge arrays
+#Flux/mass arrays
 mass_fillslope_inflow = np.zeros(run_duration)
 mass_fillslope_rut_outflow = np.zeros(run_duration)
-total_road_mass = np.zeros(run_duration)
-mass_ditch_outflow = np.zeros(run_duration)
 mass_ditch_inflow = np.zeros(run_duration)
-mass_rut_outflow = np.zeros(run_duration)
+mass_ditch_rut_outflow = np.zeros(run_duration)
+total_road_mass = np.zeros(run_duration)
 road_mass_change_oft = np.zeros(run_duration)
-ditch_mass_change = np.zeros(run_duration)
-channel_discharge_arr = []
 
+#
 road_shear_frac_arr = np.zeros(run_duration)
 road_shear_cum_arr = np.zeros(run_duration)
 road_shear_i = np.zeros(mg.number_of_nodes, dtype=bool)
@@ -187,7 +157,6 @@ road_shear_cum = np.zeros(mg.number_of_nodes, dtype=bool)
 
 # shear stresses (averages)
 avg_shear_stress_ruts = []
-avg_shear_stress_channel = []
 avg_shear_stress_road = []
 
 # manning's roughness averages
@@ -201,19 +170,26 @@ tpe_load_ruts = []
 fs_avg_ruts = []
 fs_avg_road = []
 
-# look at sediment rate of change for road vs ruts
-dzdt_avg_ruts = []
-dzdt_avg_road = []
-
-truck_num=0     
+truck_num = 0     
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
 active_init = mg.at_node['active__depth'][full_road].copy()
 surfacing_init = mg.at_node['surfacing__depth'][full_road].copy()
 ballast_init = mg.at_node['ballast__depth'][full_road].copy()
 
+# %% Initialize Landlab components
+tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=truck_num_ini, \
+    scat_loss=8e-5, f_af=f_af, f_ac=f_ac) #initialize component, 
 
-# %%
-# Intensity distribution per storm
+df_init = DepressionFinderAndRouter(mg, reroute_flow = True)
+df_init.map_depressions()
+
+fa = FlowAccumulator(mg, surface='topographic__elevation', \
+    flow_director="FlowDirectorD8", runoff_rate=1.538889e-6,)
+
+oft = OverlandFlowTransporter(mg, porosity=porosity, d50=d50_road, \
+    longitudinal_slope=S, tau_c=tau_c_road, n_c=n_c, n_f=n_f)
+
+# %% Intensity distribution per storm
 p = np.linspace(0.0001, 35, 1000)
 def pdf(p, p_mean):
     p_prime = p/p_mean
@@ -236,72 +212,70 @@ pdf, p_prime = pdf(p, 5)
 cdf, p_prime = cdf(p, 5)
 p_prime_arr = p_prime_arr(prob_arr)
 
+# Plots are helpful, save for later
+# fig, ax = plt.subplots()
+# ax.plot(p, pdf)
+# ax.annotate(r'$f(p)=\frac{1}{p_{mean}}exp(-\frac{p}{p_{mean}})$', xy=(10,0.1), xycoords='data',
+#             xytext=(0.5, 0.5), textcoords='axes fraction',
+#             va='top', ha='center',size=12)
+# ax.set_xlim(0,35)
+# ax.set_ylim(0,0.2)
+# ax.set_xlabel('$p$ [mm/hr]')
+# ax.set_ylabel('$f(p)$')
+# ax.set_title('PDF w.r.t. precipitation')
+# plt.show()
 
-fig, ax = plt.subplots()
-ax.plot(p, pdf)
-ax.annotate(r'$f(p)=\frac{1}{p_{mean}}exp(-\frac{p}{p_{mean}})$', xy=(10,0.1), xycoords='data',
-            xytext=(0.5, 0.5), textcoords='axes fraction',
-            va='top', ha='center',size=12)
-ax.set_xlim(0,35)
-ax.set_ylim(0,0.2)
-ax.set_xlabel('$p$ [mm/hr]')
-ax.set_ylabel('$f(p)$')
-ax.set_title('PDF w.r.t. precipitation')
-plt.show()
+# fig, ax = plt.subplots(1,2, figsize=(14,4.5))
+# ax[0].plot(p, cdf)
+# ax[0].annotate(r'$F(p)=1-exp{(-\frac{p}{p_{mean}})}$', xy=(10,0.5), xycoords='data',
+#                xytext=(0.5, 0.5), textcoords='axes fraction',
+#                va='top', ha='center',size=12)
+# ax[0].set_xlim(0,35)
+# ax[0].set_ylim(0,1)
+# ax[0].set_xlabel('$p$ [mm/hr]')
+# ax[0].set_ylabel('$F(p)$')
+# ax[0].set_title('CDF w.r.t. precipitation')
 
-fig, ax = plt.subplots(1,2, figsize=(14,4.5))
-ax[0].plot(p, cdf)
-ax[0].annotate(r'$F(p)=1-exp{(-\frac{p}{p_{mean}})}$', xy=(10,0.5), xycoords='data',
-               xytext=(0.5, 0.5), textcoords='axes fraction',
-               va='top', ha='center',size=12)
-ax[0].set_xlim(0,35)
-ax[0].set_ylim(0,1)
-ax[0].set_xlabel('$p$ [mm/hr]')
-ax[0].set_ylabel('$F(p)$')
-ax[0].set_title('CDF w.r.t. precipitation')
+# ax[1].plot(p_prime, cdf)
+# ax[1].annotate("$F(p\')=1-exp{(-p\')}$", xy=(2,0.5), xycoords='data',
+#                xytext=(0.5, 0.5), textcoords='axes fraction',
+#                va='top', ha='center',size=12)
+# ax[1].set_xlim(0,7)
+# ax[1].set_ylim(0,1)
+# ax[1].set_xlabel('$p\' =\\frac{p}{p_{mean}}$')
+# ax[1].set_ylabel('$F(p\')$')
+# ax[1].set_title('CDF w.r.t. nondimensionalized precipitation')
+# plt.show()
 
-ax[1].plot(p_prime, cdf)
-ax[1].annotate("$F(p\')=1-exp{(-p\')}$", xy=(2,0.5), xycoords='data',
-               xytext=(0.5, 0.5), textcoords='axes fraction',
-               va='top', ha='center',size=12)
-ax[1].set_xlim(0,7)
-ax[1].set_ylim(0,1)
-ax[1].set_xlabel('$p\' =\\frac{p}{p_{mean}}$')
-ax[1].set_ylabel('$F(p\')$')
-ax[1].set_title('CDF w.r.t. nondimensionalized precipitation')
-plt.show()
+# fig, ax = plt.subplots()
+# for i in range(len(prob_arr)):
+#     plt.plot([0, max(p_prime)],[prob_arr[i],prob_arr[i]], '--', color='gray')
+# ax.plot(p_prime, cdf)
+# ax.annotate('$F(p\')=%0.2f$'%prob_arr[0], xy=(5, prob_arr[0]-0.035), size=8)
+# ax.annotate('$F(p\')=%0.2f$'%prob_arr[1], xy=(5, prob_arr[1]-0.035), size=8)
+# ax.annotate('$F(p\')=%0.2f$'%prob_arr[2], xy=(5, prob_arr[2]-0.035), size=8)
+# ax.annotate('$F(p\')=%0.2f$'%prob_arr[3], xy=(5, prob_arr[3]-0.035), size=8)
+# ax.annotate('$F(p\')=%0.2f$'%prob_arr[4], xy=(5, prob_arr[4]-0.035), size=8)
+# ax.annotate('$F(p\')=%0.2f$'%prob_arr[5], xy=(5, prob_arr[5]-0.035), size=8)
+# ax.annotate('$F(p\')=%0.2f$'%prob_arr[6], xy=(5, prob_arr[6]-0.035), size=8)
+# ax.annotate('$F(p\')=%0.2f$'%prob_arr[7], xy=(5, prob_arr[7]-0.035), size=8)
+# ax.annotate('$F(p\')=%0.2f$'%prob_arr[8], xy=(5, prob_arr[8]-0.035), size=8)
+# ax.annotate('$F(p\')=%0.2f$'%prob_arr[9], xy=(5, prob_arr[9]-0.035), size=8)
+# ax.set_xlim(0,7)
+# ax.set_ylim(0,1)
+# ax.set_xlabel('$p\'$')
+# ax.set_ylabel('$F(p\')$')
+# ax.set_title('CDF w.r.t. nondimensionalized precipitation')
+# plt.show()
 
-fig, ax = plt.subplots()
-for i in range(len(prob_arr)):
-    plt.plot([0, max(p_prime)],[prob_arr[i],prob_arr[i]], '--', color='gray')
-ax.plot(p_prime, cdf)
-ax.annotate('$F(p\')=%0.2f$'%prob_arr[0], xy=(5, prob_arr[0]-0.035), size=8)
-ax.annotate('$F(p\')=%0.2f$'%prob_arr[1], xy=(5, prob_arr[1]-0.035), size=8)
-ax.annotate('$F(p\')=%0.2f$'%prob_arr[2], xy=(5, prob_arr[2]-0.035), size=8)
-ax.annotate('$F(p\')=%0.2f$'%prob_arr[3], xy=(5, prob_arr[3]-0.035), size=8)
-ax.annotate('$F(p\')=%0.2f$'%prob_arr[4], xy=(5, prob_arr[4]-0.035), size=8)
-ax.annotate('$F(p\')=%0.2f$'%prob_arr[5], xy=(5, prob_arr[5]-0.035), size=8)
-ax.annotate('$F(p\')=%0.2f$'%prob_arr[6], xy=(5, prob_arr[6]-0.035), size=8)
-ax.annotate('$F(p\')=%0.2f$'%prob_arr[7], xy=(5, prob_arr[7]-0.035), size=8)
-ax.annotate('$F(p\')=%0.2f$'%prob_arr[8], xy=(5, prob_arr[8]-0.035), size=8)
-ax.annotate('$F(p\')=%0.2f$'%prob_arr[9], xy=(5, prob_arr[9]-0.035), size=8)
-ax.set_xlim(0,7)
-ax.set_ylim(0,1)
-ax.set_xlabel('$p\'$')
-ax.set_ylabel('$F(p\')$')
-ax.set_title('CDF w.r.t. nondimensionalized precipitation')
-plt.show()
-
-# %%
-# Main loop
+# %% Main loop
 start = time.time()
 for i in range(0, run_duration): # daily time step
-    
     z_ini = mg.at_node['topographic__elevation'].copy()
 
     tpe.run_one_step()
 
-    truck_num += tpe._truck_num
+    truck_num += tpe.truck_num
     
     intensity = intensity_90[i]  # use the i-th day's intensity
     dt_day = dt[i] # use the i-th day's time step
@@ -323,28 +297,23 @@ for i in range(0, run_duration): # daily time step
 
         road_shear_cum_arr[i] = road_shear_cum_arr[i-1]
 
-        # append shear stress vectors
+        #Append shear stress vectors
         avg_shear_stress_ruts.append(0)
-        avg_shear_stress_channel.append(0)
         avg_shear_stress_road.append(0)
 
-        # append manning's roughness vectors
+        #Append manning's roughness vectors
         avg_n_ruts.append(np.nanmean(mg.at_node['total__roughness'][ruts]))
         avg_n_road.append(np.nanmean(mg.at_node['total__roughness'][full_road]))
 
-        # appedn shear stress partitioning coefficient
+        #Append shear stress partitioning coefficient
         fs_avg_ruts.append(np.nanmean(mg.at_node['shear_stress__partitioning'][ruts]))
         fs_avg_road.append(np.nanmean(mg.at_node['shear_stress__partitioning'][full_road]))
 
-        # append sediment rate of change
-        dzdt_avg_ruts.append(np.nanmean(mg.at_node['sediment__rate_of_change'][ruts]))
-        dzdt_avg_road.append(np.nanmean(mg.at_node['sediment__rate_of_change'][mask1]))
-
-        # append tpe loading
-        tpe_load_ruts.append((mg.at_node['sediment__added']).sum()\
+        #Append TPE loading
+        tpe_load_ruts.append((tpe.sed_added).sum()\
             *cell_area*rho_s*(1-porosity)) # gives increase in mass in the active layer due to truck passes
         
-        # for plotting layer depths
+        #For plotting layer depths
         sa_arr[i] = np.sum(mg.at_node['active__depth'][full_road])
         ss_arr[i] = np.sum(mg.at_node['surfacing__depth'][full_road])
         sb_arr[i] = np.sum(mg.at_node['ballast__depth'][full_road])
@@ -359,87 +328,46 @@ for i in range(0, run_duration): # daily time step
 
         for j, storm_frac in enumerate(frac_arr):
             intensity_dist = p_prime_arr[j]*intensity
-            # print(f"Intensity Distribution = {intensity_dist:.2f} mm/hr")
             dt_frac = storm_frac*dt_day
-            # print(f"Fraction of Storm = {dt_frac:.3f} day")
             #=================================Calculate overland flow transport=================================
             rain_m_per_s = intensity_dist * 2.77778e-7 # conversion to m/s
             mg.at_node['water__unit_flux_in'] = np.ones(mg.number_of_nodes) * rain_m_per_s
             fa.accumulate_flow()
             oft.run_one_step(dt_frac)
 
-            mass_rut_outflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[0,0:33]]).sum()*rho_s*dt_frac*86400
+            mass_ditch_rut_outflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[0,1:33]]).sum()*rho_s*dt_frac*86400
             mass_ditch_inflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[:,0]]).sum()*rho_s*dt_frac*86400
             mass_fillslope_inflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[:,63]]).sum()*rho_s*dt_frac*86400
-            mass_fillslope_rut_outflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[0,33:64]]).sum()*rho_s*dt_frac*86400
-            # print("Ditch Inflow, Time Step:", mass_ditch_inflow_i)
+            mass_fillslope_rut_outflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[0,33:63]]).sum()*rho_s*dt_frac*86400
 
-            mass_rut_outflow[i] += mass_rut_outflow_i
+            mass_ditch_rut_outflow[i] += mass_ditch_rut_outflow_i
             mass_ditch_inflow[i] += mass_ditch_inflow_i
             mass_fillslope_inflow[i] += mass_fillslope_inflow_i
             mass_fillslope_rut_outflow[i] += mass_fillslope_rut_outflow_i
             
-            mg.at_node['shear_stress'] = oft._shear_stress
-            road_shear = mg.at_node['shear_stress'][full_road].flatten()
+            # mg.at_node['shear_stress'] = oft.shear_stress
+            road_shear = oft.shear_stress[full_road].flatten()
 
             road_shear_i = np.array([True if shear_stress>=tau_c_road or road_shear_i[x]==True \
                  else False for x, shear_stress in enumerate(road_shear)])
             road_shear_cum = np.array([True if shear_stress>=tau_c_road or road_shear_cum[x]==True\
                  else False for x, shear_stress in enumerate(road_shear)])
 
-            #=================================Calculate lumped channelized flow transport=================================
-            # surface_water_discharge = mg.at_node['surface_water__discharge']
-            # channel_discharge = surface_water_discharge[ditch].sum(axis=1).max()
-            # channel_discharge_arr.append(channel_discharge)
-            
-            # fs_ditch = (ditch_grain_n/ditch_n)**(24/13)
-            # a = 0.718
-            
-            # R = ((ditch_n*channel_discharge)**(6/13))/((6*S/a)**(3/13))
-            # # print("R:", R)
-            
-            # # calculates effective shear stress
-            # ditch_shear_stress = rho_w*g*R*S*fs_ditch
-
-            # if ditch_shear_stress > tau_c_ditch:
-            #     sediment_outflux = (
-            #         ((10**(-4.348)) \
-            #         / (rho_s*(d50_ditch**0.811))) \
-            #         * (ditch_shear_stress-tau_c_ditch)**(2.457)) \
-            #         * np.sqrt((6/a)*R) #[m^3/s]
-            # else:
-            #     sediment_outflux = 0
-            
-            # # print("Ditch Shear Stress:", ditch_shear_stress)
-
-            # mass_ditch_outflow_i = sediment_outflux*rho_s*dt_frac*86400*(1-porosity)
-            # # print("Ditch Outflow, Time Step:",mass_ditch_outflow_i)
-
-            # mass_ditch_outflow[i] += mass_ditch_outflow_i
-            # # print("Ditch Outflow, Cumulative:",mass_ditch_outflow[i])            
-
         road_shear_frac_arr[i] = road_shear_i[road_shear_i==True].sum()/len(road_shear_i)
         road_shear_cum_arr[i] = road_shear_cum[road_shear_cum==True].sum()/len(road_shear_cum)
 
-        mg.at_node['shear_stress'] = oft._shear_stress
+        mg.at_node['shear_stress'] = oft.shear_stress
         avg_shear_stress_ruts.append(np.nanmean(mg.at_node['shear_stress'][ruts]))
         avg_shear_stress_road.append(np.nanmean(mg.at_node['shear_stress'][full_road]))
-        # avg_shear_stress_channel.append(ditch_shear_stress)
 
-        road_mass_change_oft[i] = mass_ditch_inflow[i] + mass_rut_outflow[i]
-        total_road_mass[i] = mass_ditch_inflow[i] + mass_rut_outflow[i] + mass_fillslope_inflow[i] + mass_fillslope_rut_outflow[i]    
-        # ditch_mass_change[i] = mass_ditch_inflow[i] - mass_ditch_outflow[i]
+        road_mass_change_oft[i] = mass_ditch_inflow[i] + mass_ditch_rut_outflow[i]
+        total_road_mass[i] = mass_ditch_inflow[i] + mass_ditch_rut_outflow[i] + mass_fillslope_inflow[i] + mass_fillslope_rut_outflow[i]
         
         dz = z-z_ini # calculate elevation change at each daily time step
         dz_arr.append(sum(dz[full_road.flatten()]))
 
         dz_cum = z-z_ini_cum # calculate cumulative elevation change
         dz_arr_cum.append(sum(dz_cum[full_road.flatten()])) 
-
-        # for plotting layer depths
-        sa_arr[i] = np.sum(mg.at_node['active__depth'][full_road])
-        ss_arr[i] = np.sum(mg.at_node['surfacing__depth'][full_road])
-        sb_arr[i] = np.sum(mg.at_node['ballast__depth'][full_road])
         
         fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
         im = imshow_grid(mg,'active__fines', var_name='Active Fines Depth', 
@@ -492,38 +420,33 @@ for i in range(0, run_duration): # daily time step
         plt.close()
         # plt.show()
 
-        # append manning's n vectors
+        #Append manning's n vectors
         avg_n_ruts.append(np.nanmean(mg.at_node['total__roughness'][ruts]))
         avg_n_road.append(np.nanmean(mg.at_node['total__roughness'][full_road]))
 
-        # append shear stress partitioning coefficient vectors        
+        #Append shear stress partitioning coefficient vectors        
         fs_avg_ruts.append(np.nanmean(mg.at_node['shear_stress__partitioning'][ruts]))
         fs_avg_road.append(np.nanmean(mg.at_node['shear_stress__partitioning'][full_road]))
         
-        # append tpe loading
-        tpe_load_ruts.append((mg.at_node['sediment__added']).sum()*cell_area*rho_s*(1-porosity))
-        
-        # append sediment rate of change
-        dzdt_avg_ruts.append(np.nanmean(mg.at_node['sediment__rate_of_change'][ruts]))
-        dzdt_avg_road.append(np.nanmean(mg.at_node['sediment__rate_of_change'][mask1]))
-    print("change in sum of depths:", active_init.sum()+surfacing_init.sum()+ballast_init.sum() - (sa_arr[i]+ss_arr[i]+sb_arr[i]))
-    print("change in z from OFT:", np.divide(total_road_mass.cumsum()[i], cell_area*rho_s*(1-porosity)))
+        #Append TPE loading
+        tpe_load_ruts.append((tpe.sed_added).sum()*cell_area*rho_s*(1-porosity))
+    
+        #For plotting layer depths
+        sa_arr[i] = np.sum(mg.at_node['active__depth'][full_road])
+        ss_arr[i] = np.sum(mg.at_node['surfacing__depth'][full_road])
+        sb_arr[i] = np.sum(mg.at_node['ballast__depth'][full_road])
+
+    print("Change in sum of depths:", (active_init.sum()+surfacing_init.sum()+ballast_init.sum()) - (sa_arr[i]+ss_arr[i]+sb_arr[i]))
+    print("Change in z from OFT:", np.divide(total_road_mass.cumsum()[i], cell_area*rho_s*(1-porosity)))
 wall_time = time.time() - start
 print("Wall time for run:", wall_time, "s")
 
-# %%
-#Calculations for plots
+# %% Calculations for plots
 road_mass_change_dz = np.multiply(dz_arr, (cell_area*rho_s*(1-porosity)))/2
 cum_road_mass_change_dz = np.multiply(dz_arr_cum, cell_area*rho_s*(1-porosity))/2
 
 cum_road_mass_change_oft = road_mass_change_oft.cumsum()
-
-# total_ditch_mass_change = ditch_mass_change
-
-# cum_mass_ditch_inflow = mass_ditch_inflow.cumsum()
-# cum_mass_ditch_outflow = mass_ditch_outflow.cumsum()
-
-# %%
+# %% GIF creation
 from PIL import Image
 import glob
 
@@ -587,7 +510,7 @@ image_list_dz[0].save(
             duration=1000, # in milliseconds
             loop=0)
 
-# %%
+# %% Cross section plot
 xsec_active = mg.at_node['topographic__elevation'][mg.nodes[100,:].flatten()]
 xsec_surf =  mg.at_node['surfacing__elevation'][mg.nodes[100,:].flatten()] 
 xsec_ball = mg.at_node['ballast__elevation'][mg.nodes[100,:].flatten()]
@@ -603,7 +526,7 @@ plt.ylabel('Elevation (m)')
 plt.legend()
 plt.show()
 
-# %%
+# %% Rainfall plots
 fig, ax = plt.subplots(2,1)
 ax[0].bar(range(0,run_duration), np.multiply(intensity_arr,np.multiply(dt_arr,24)))
 ax[0].set_xlabel('Day')
@@ -618,45 +541,46 @@ plt.suptitle(r'%s' %site_name)
 plt.tight_layout()
 plt.show()
 
-# %%
+# %% Important model output
 total_dz = np.abs(min(dz_arr_cum)) 
 total_dV = total_dz*cell_area 
 total_load = total_dV*rho_s*(1-porosity)
 total_load_div = total_load/2
 
 print(
-    "Total rainfall,",run_duration, "days:", np.round(sum(np.multiply(intensity_arr,np.multiply(dt_arr,24)),2)), 'mm'
+    "Total rainfall,",
+    run_duration, "days:", 
+    np.round(sum(np.multiply(intensity_arr,np.multiply(dt_arr,24)),2)), 'mm'
     )
-
 print(
-    'Sediment pumped:', np.round(mg.at_node['sediment__added'].sum()*cell_area*rho_s*(1-porosity),2), 'kg'
+    'Sediment pumped:', 
+    np.round(mg.at_node['sediment__added'].sum()*cell_area*rho_s*(1-porosity),2), 'kg'
     )
-
 print(
-    'Cumulative sediment load from road (half-road OFT calculation):', np.round((mass_ditch_inflow + mass_rut_outflow).sum(),2), 'kg' 
+    'Cumulative sediment load from road (half-road OFT calculation):', 
+    np.round((mass_ditch_inflow + mass_ditch_rut_outflow).sum(),2), 'kg' 
     )
-    
 print(
-    'Cumulative sediment load from road (half-road OFT calculation - fillslope side):', np.round((mass_fillslope_inflow + mass_fillslope_rut_outflow).sum(),2), 'kg' 
+    'Cumulative sediment load from road (half-road OFT calculation - fillslope side):', 
+    np.round((mass_fillslope_inflow + mass_fillslope_rut_outflow).sum(),2), 'kg' 
     )
-
 print(
-    'Cumulative sediment load from road (full-road OFT calculation):', np.round((total_road_mass).sum(),2), 'kg' 
+    'Cumulative sediment load from road (full-road OFT calculation):', 
+    np.round((total_road_mass).sum(),2), 'kg' 
     )
-
 print(
-    'Cumulative sediment load from road (half-road dz estimate):', np.round(total_load_div,2), 'kg'
+    'Cumulative sediment load from road (half-road dz estimate):', 
+    np.round(total_load_div,2), 'kg'
     )
-
 print(
-    'Cumulative sediment load from road (full-road dz estimate):', np.round(total_load, 2), 'kg'
+    'Cumulative sediment load from road (full-road dz estimate):', 
+    np.round(total_load, 2), 'kg'
     )
-
-print('Comparison between sediment load from road elevation change calculation and channel influx from OFT:',\
+print('Comparison between sediment load from road elevation change calculation and channel influx from OFT:',
     np.round(total_load - (total_road_mass).sum(),2)
     )
 
-# %%
+# %% Delta mass between time steps
 fig, ax = plt.subplots(1,2, figsize=(9,4))
 
 # plot total mass change between time steps on the road
@@ -677,72 +601,56 @@ ax[1].set_title('(b) Half Road (dz)')
 plt.tight_layout()
 plt.show()
 
-# %%
+# %% Cumulative mass change
 fig, ax = plt.subplots(1,2, figsize=(9,4))
 
 ax[0].plot(range(0,run_duration), -cum_road_mass_change_oft)
 ax[0].plot(range(0,run_duration), np.zeros(len(range(0,run_duration))), '--', color='gray')
 ax[0].set_xlabel('Day')
-ax[0].set_ylabel('Cumulative mass change (from OFT)- \nhalf road [$kg$]')
+ax[0].set_ylabel('Cumulative mass change - \nhalf road [$kg$]')
 ax[0].set_xlim(0,run_duration)
+ax[0].set_title('(a) Half Road (OFT)')
 
 ax[1].plot(range(0,run_duration), cum_road_mass_change_dz)
 ax[1].plot(range(0,run_duration), np.zeros(len(range(0,run_duration))), '--', color='gray')
 ax[1].set_xlabel('Day')
-ax[1].set_ylabel('Cumulative mass change (from dz) - \nhalf road [$kg$]')
+ax[1].set_ylabel('Cumulative mass change - \nhalf road [$kg$]')
 ax[1].set_xlim(0,run_duration)
+ax[1].set_title('(b) Half Road (dz)')
 
 plt.tight_layout()
 plt.show()
 
-# %%
+# %% Testing?
 plt.plot(np.multiply(sa_arr,(cell_area*rho_s*(1-porosity)))/2, -cum_road_mass_change_oft)
 plt.xlabel("Active depth mass\nhalf road [$kg$]")
 plt.ylabel('Cumulative mass change (from OFT)\nhalf road [$kg$]')
 plt.show()
-
-# %%
-# # plot mass inflow into ditch - cumulative and between time steps
-# fig, ax = plt.subplots(1,2, figsize=(9,4))
-# ax[0].plot(range(0,run_duration), cum_mass_ditch_inflow)
-# ax[0].plot(range(0,run_duration), np.zeros(len(range(0,run_duration))), '--', color='gray')
-# ax[0].set_xlabel('Day')
-# ax[0].set_ylabel('Cumulative mass inflow - \nrouted into ditch [$kg$]')
-# ax[0].set_xlim(0,run_duration)
-
-# ax[1].plot(range(0,run_duration), -cum_mass_ditch_outflow)
-# ax[1].plot(range(0,run_duration), np.zeros(len(range(0,run_duration))), '--', color='gray')
-# ax[1].set_xlabel('Day')
-# ax[1].set_ylabel('Cumulative mass outflow - \nrouted out of ditch [$kg$]')
-# ax[1].set_xlim(0,run_duration)
-# plt.tight_layout()
-# plt.show()
-
-
-# %%
-# additional plots
-
-# scattering, pumping, crushing plots
-# plot cumulative fluxes
-# this plot needs to be looked at!
-# q_cs = tpe._q_cs    # [m/truck] crushing
-# sum_q_cs = q_cs[mg.nodes[1,9:41]].sum() # summed across the rut for half road
-# q_ps = tpe._q_ps    # [m/truck] pumping
-# sum_q_ps = q_ps[mg.nodes[1,9:41]].sum() # summed across the rut for half road
-# # q are in m/truck not m/s so shouldn't be multiplied by dt_arr, should be multiplied by truck number?
-# plt.plot(range(0,run_duration), (np.multiply(sum_q_cs, dt_arr)*rho_s).cumsum(), color='pink', label='crushing')
-# plt.plot(range(0,run_duration), (np.multiply(sum_q_ps, dt_arr)*rho_s).cumsum(), color='green', label='pumping')
-# plt.plot(range(0,run_duration), np.zeros(len(range(0,run_duration))), '--', color='gray')
-# plt.xlabel('Day')
-# plt.ylabel('Pumping and Crushing Fluxes [kg]')
-# plt.xlim(0,run_duration)
-# plt.legend()
-# plt.show()
-
+# %% TPE loading
 # plot sediment load to the active layer in the ruts from truck passes
 plt.plot(range(0,run_duration), tpe_load_ruts)
 plt.xlabel('Day')
 plt.ylabel('Cumulative sediment load to the active layer of the ruts \nfrom tpe [$kg$]')
+plt.xlim(0,run_duration)
+plt.show()
+
+# %% Total depths over the road surface 
+plt.plot(range(0,run_duration), sa_arr)
+plt.xlabel('Day')
+plt.ylabel('Active Depth over full road surface [$m$]')
+plt.xlim(0,run_duration)
+plt.title(r'%s ($n_{f_{road}} = %0.3f$)' %(site_name, n_f))
+plt.show()
+
+plt.plot(range(0,run_duration), ss_arr)
+plt.xlabel('Day')
+plt.ylabel('Surfacing Depth over full road surface [$m$]')
+plt.xlim(0,run_duration)
+plt.show()
+
+plt.plot(range(0,run_duration), sb_arr)
+plt.xlabel('Day')
+plt.ylabel('Ballast Depth over full road surface [$m$]')
 plt.xlim(0,run_duration)
 plt.show()
 
@@ -771,34 +679,3 @@ plt.legend()
 plt.show()
 
 # %%
-# plot average active layer thickness over time in the ruts
-plt.plot(range(0,run_duration), sa_arr)
-plt.xlabel('Day')
-plt.ylabel('Active Depth over full road surface [$m$]')
-plt.xlim(0,run_duration)
-plt.title(r'%s ($n_{f_{road}} = %0.3f$)' %(site_name, n_f))
-plt.show()
-
-# these have been a bit unnecessary to plot because they are relatively unchanging.
-# they lose on the order of 1e-7 m per day of thickness due to TPE processes only.
-# if truck_num is varied then these plots will provide more meaning.
-
-# plot average surfacing layer thickness over time in the ruts
-plt.plot(range(0,run_duration), ss_arr)
-plt.xlabel('Day')
-plt.ylabel('Surfacing Depth over full road surface [$m$]')
-plt.xlim(0,run_duration)
-plt.show()
-
-# plot average ballast layer thickness over time in the ruts
-plt.plot(range(0,run_duration), sb_arr)
-plt.xlabel('Day')
-plt.ylabel('Ballast Depth over full road surface [$m$]')
-plt.xlim(0,run_duration)
-plt.show()
-
-
-# %%
-
-
-
