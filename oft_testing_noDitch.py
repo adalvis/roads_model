@@ -11,7 +11,7 @@ np.set_printoptions(threshold=np.inf)
 from utilities.erodible_grid import Erodible_Grid
 
 # %% Define parameters
-run_duration = 122
+run_duration = 50
 
 #Physical constants
 rho_w=1000
@@ -54,7 +54,7 @@ dt_hours_90 = dt_hours[rain_gauge].iloc[intensity_index:].values
 dt = np.array(dt_hours_90)/24
 
 # initialize road layer depths
-Sa_ini = 0.01 # active depth in m
+Sa_ini = 0.019 # active depth in m
 Ss_ini = 0.23 # surfacing depth in m
 Sb_ini = 2    # ballast depth in m
 
@@ -64,11 +64,6 @@ truck_num_ini = 4
 #Define roughness values for fine and coarse material
 n_c = 0.05   
 n_f = 0.015
-
-# fractions of fine and coarse grains in the active layer
-# FIX THIS FORMULATION
-f_af = 0.75
-f_ac = 0.25
 
 #Define d50 and tau_c
 d50_road = 0.0001 # [m] 
@@ -179,7 +174,7 @@ ballast_init = mg.at_node['ballast__depth'][full_road].copy()
 
 # %% Initialize Landlab components
 tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=truck_num_ini, \
-    scat_loss=8e-5, f_af=f_af, f_ac=f_ac) #initialize component, 
+    scat_loss=8e-5) #initialize component, 
 
 df_init = DepressionFinderAndRouter(mg, reroute_flow = True)
 df_init.map_depressions()
@@ -311,8 +306,7 @@ for i in range(0, run_duration): # daily time step
         fs_avg_road.append(np.nanmean(mg.at_node['shear_stress__partitioning'][full_road]))
 
         #Append TPE loading
-        tpe_load_ruts.append((tpe.sed_added).sum()\
-            *cell_area*rho_s*(1-porosity)) # gives increase in mass in the active layer due to truck passes
+        tpe_load_ruts.append((tpe.sed_added).sum())
         
         #For plotting layer depths
         sa_arr[i] = np.sum(mg.at_node['active__depth'][full_road])
@@ -371,7 +365,7 @@ for i in range(0, run_duration): # daily time step
         dz_arr_cum.append(sum(dz_cum[full_road.flatten()])) 
         
         fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
-        im = imshow_grid(mg,'active__fines', var_name='Active Fines Depth', 
+        im = imshow_grid(mg,'active__depth_fines', var_name='Active Fines Depth', 
                      plot_name='Active Fines Depth, t = %i days' %i,
                      var_units='$m$', grid_units=('m','m'), 
                      cmap='pink', vmin=0, vmax=0.00005, shrink=0.9)
@@ -430,14 +424,13 @@ for i in range(0, run_duration): # daily time step
         fs_avg_road.append(np.nanmean(mg.at_node['shear_stress__partitioning'][full_road]))
         
         #Append TPE loading
-        tpe_load_ruts.append((tpe.sed_added).sum()*cell_area*rho_s*(1-porosity))
+        tpe_load_ruts.append((tpe.sed_added).sum())
     
         #For plotting layer depths
         sa_arr[i] = np.sum(mg.at_node['active__depth'][full_road])
         ss_arr[i] = np.sum(mg.at_node['surfacing__depth'][full_road])
         sb_arr[i] = np.sum(mg.at_node['ballast__depth'][full_road])
-    if i == 92-62 or i == 123-62 or i == 152-62 or i == 183-62:
-        print("End of month total:", np.round((mass_ditch_inflow + mass_ditch_rut_outflow).sum(),2), "kg" )
+
     print("Change in sum of depths:", np.round((active_init.sum()+surfacing_init.sum()+ballast_init.sum())\
          - (sa_arr[i]+ss_arr[i]+sb_arr[i]),2))
     print("Change in z from OFT:", np.round(np.divide(total_road_mass.cumsum()[i],\
@@ -639,30 +632,23 @@ plt.xlim(0,run_duration)
 plt.show()
 
 # %% Total depths over the road surface 
-fig, ax = plt.subplots(4,1, figsize=(4,9))
+fig, ax = plt.subplots(3,1, figsize=(4,7))
 
-active_init.sum()+surfacing_init.sum()+ballast_init.sum()
-
-ax[0].plot(range(0,run_duration), (-active_init.sum()-surfacing_init.sum() + (sa_arr+ss_arr))/(nrows*ncols))
-ax[0].set_xlabel('Day')
-ax[0].set_ylabel('Active + Surfacing Depth\nchange [$m$]')
-ax[0].set_xlim(0,run_duration)
 ax[0].set_title(r'%s ($n_{f_{road}} = %0.3f$)' %(site_name, n_f))
+ax[0].plot(range(0,run_duration), (-active_init.sum()+sa_arr)/(nrows*ncols))
+ax[0].set_xlabel('Day')
+ax[0].set_ylabel('Active Depth\nchange [$m$]')
+ax[0].set_xlim(0,run_duration)
 
-ax[1].plot(range(0,run_duration), (-active_init.sum()+sa_arr)/(nrows*ncols))
+ax[1].plot(range(0,run_duration), (-surfacing_init.sum()+ss_arr)/(nrows*ncols))
 ax[1].set_xlabel('Day')
-ax[1].set_ylabel('Active Depth\nchange [$m$]')
+ax[1].set_ylabel('Surfacing Depth\nchange [$m$]')
 ax[1].set_xlim(0,run_duration)
 
-ax[2].plot(range(0,run_duration), (-surfacing_init.sum()+ss_arr)/(nrows*ncols))
+ax[2].plot(range(0,run_duration), (-ballast_init.sum()+sb_arr)/(nrows*ncols))
 ax[2].set_xlabel('Day')
-ax[2].set_ylabel('Surfacing Depth\nchange [$m$]')
+ax[2].set_ylabel('Ballast Depth\nchange [$m$]')
 ax[2].set_xlim(0,run_duration)
-
-ax[3].plot(range(0,run_duration), (-ballast_init.sum()+sb_arr)/(nrows*ncols))
-ax[3].set_xlabel('Day')
-ax[3].set_ylabel('Ballast Depth\nchange [$m$]')
-ax[3].set_xlim(0,run_duration)
 plt.tight_layout()
 plt.show()
 
