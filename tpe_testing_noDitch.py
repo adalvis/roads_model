@@ -2,16 +2,17 @@
 import time
 
 import matplotlib.pyplot as plt
+import random as rnd
 import numpy as np
 import pandas as pd
 
 from landlab import RasterModelGrid, imshow_grid
-from landlab.components import TruckPassErosion
+from landlab.components import TruckPassErosionOLD, TruckPassErosion
 np.set_printoptions(threshold=np.inf)
 from utilities.erodible_grid import Erodible_Grid
 
 #%% Define parameters
-run_duration = 20
+run_duration = 100
 
 #Physical constants
 rho_w=1000
@@ -67,6 +68,8 @@ mg, z, road_flag, n = eg()
 noise_amplitude=0.005
 road = road_flag==1
 
+
+# random = [rnd.random() for x in range(len(z[road]))]
 random=np.random.rand(
     len(z[road])
 )
@@ -115,6 +118,9 @@ tpe_load_ruts = []
 
 truck_num = 0     
 #%% Initialize Landlab components
+# tpe = TruckPassErosionOLD(mg, center, half_width, full_tire, truck_num=truck_num_ini, \
+#     scat_loss=8e-5) #initialize component, 
+
 tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=truck_num_ini, \
     scat_loss=8e-5) #initialize component, 
 
