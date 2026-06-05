@@ -11,7 +11,7 @@ np.set_printoptions(threshold=np.inf)
 from utilities.erodible_grid import Erodible_Grid
 
 # %% Define parameters
-run_duration = 50
+run_duration = 100
 
 #Physical constants
 rho_w=1000
@@ -106,9 +106,9 @@ ball_depth = mg.add_ones('ballast__depth', at='node')
 ball_depth *= Sb_ini
 
 # %% Pre-define location indices
-ruts = [mg.nodes[:, 26-9:40-9], mg.nodes[:, 41-9:55-9]]
-half_road = mg.nodes[:, 0:33]
-full_road = mg.nodes[:, 0:64]
+ruts = [mg.nodes[1:-1, 26-8:40-8], mg.nodes[1:-1, 41-8:55-8]]
+half_road = mg.nodes[1:-1, 1:33]
+full_road = mg.core_nodes
 
 # %% DEM plot
 fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
@@ -330,10 +330,10 @@ for i in range(0, run_duration): # daily time step
             fa.accumulate_flow()
             oft.run_one_step(dt_frac)
 
-            mass_ditch_rut_outflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[0,1:33]]).sum()*rho_s*dt_frac*86400
-            mass_ditch_inflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[:,0]]).sum()*rho_s*dt_frac*86400
-            mass_fillslope_inflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[:,63]]).sum()*rho_s*dt_frac*86400
-            mass_fillslope_rut_outflow_i = (mg.at_node["sediment__volume_influx"][mg.nodes[0,33:63]]).sum()*rho_s*dt_frac*86400
+            mass_ditch_rut_outflow_i = (mg.at_node["sediment__volume_outflux"][mg.nodes[1,1:33]]).sum()*dt_frac*86400
+            mass_ditch_inflow_i = (mg.at_node["sediment__volume_outflux"][mg.nodes[1:-1,1]]).sum()*dt_frac*86400
+            mass_fillslope_inflow_i = (mg.at_node["sediment__volume_outflux"][mg.nodes[1:-1,62]]).sum()*dt_frac*86400
+            mass_fillslope_rut_outflow_i = (mg.at_node["sediment__volume_outflux"][mg.nodes[1,33:63]]).sum()*dt_frac*86400
 
             mass_ditch_rut_outflow[i] += mass_ditch_rut_outflow_i
             mass_ditch_inflow[i] += mass_ditch_inflow_i
@@ -406,8 +406,7 @@ for i in range(0, run_duration): # daily time step
         plt.ylabel('Road length (m)')
         im = imshow_grid(mg,'dz_cum', var_name='Cumulative dz', var_units='m', 
                      plot_name='Elevation change, t = %i days' %i,
-                     grid_units=('m','m'), cmap='RdBu', vmin=-0.0009, 
-                     vmax=0.0009, shrink=0.9)
+                     grid_units=('m','m'), cmap='RdBu', shrink=0.9)
         plt.xlabel('Road width (m)')
         plt.ylabel('Road length (m)')
         plt.tight_layout()
@@ -551,7 +550,7 @@ print(
     )
 print(
     'Sediment pumped:', 
-    np.round(mg.at_node['sediment__added'].sum()*cell_area*rho_s*(1-porosity),2), 'kg'
+    np.round(mg.at_node['sediment__added'].sum(),2), 'kg'
     )
 print(
     'Cumulative sediment load from road (half-road OFT calculation):', 
