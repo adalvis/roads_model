@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from landlab import RasterModelGrid, imshow_grid
-from landlab.components import TruckPassErosionOLD, TruckPassErosion
+from landlab.components import TruckPassErosion
 np.set_printoptions(threshold=np.inf)
 from utilities.erodible_grid import Erodible_Grid
 
@@ -84,9 +84,9 @@ ball_depth = mg.add_ones('ballast__depth', at='node')
 ball_depth *= Sb_ini
 
 #%% Pre-define location indices
-ruts = [mg.nodes[:, 26-9:40-9], mg.nodes[:, 41-9:55-9]]
-half_road = mg.nodes[:, 0:33]
-full_road = mg.nodes[:, 0:64]
+ruts = [mg.nodes[1:-1, 26-8:40-8], mg.nodes[1:-1, 41-8:55-8]]
+half_road = mg.nodes[1:-1, 1:33]
+full_road = mg.core_nodes
 
 #%% DEM plot
 fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
@@ -113,6 +113,16 @@ sa_arr = np.zeros(run_duration)
 ss_arr = np.zeros(run_duration)
 sb_arr = np.zeros(run_duration)
 
+Ma = np.zeros(run_duration)
+Maf = np.zeros(run_duration)
+Mac = np.zeros(run_duration)
+Ms = np.zeros(run_duration)
+Msf = np.zeros(run_duration)
+Msc = np.zeros(run_duration)
+Mb = np.zeros(run_duration)
+Mbf = np.zeros(run_duration)
+Mbc = np.zeros(run_duration)
+
 # sediment load in the ruts due to TPE
 tpe_load_ruts = []
 
@@ -125,9 +135,12 @@ tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=truck_num_in
     scat_loss=8e-5) #initialize component, 
 
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
-active_init = mg.at_node['active__depth'].copy()
-surfacing_init = mg.at_node['surfacing__depth'].copy()
-ballast_init = mg.at_node['ballast__depth'].copy()
+Ma_ini_cum = mg.at_node['active__mass'].copy()
+Ms_ini_cum = mg.at_node['surfacing__mass'].copy()
+Mb_ini_cum = mg.at_node['ballast__mass'].copy()
+active_init = mg.at_node['active__depth'][full_road].copy()
+surfacing_init = mg.at_node['surfacing__depth'][full_road].copy()
+ballast_init = mg.at_node['ballast__depth'][full_road].copy()
 
 #%% Main loop
 start = time.time()
@@ -139,10 +152,10 @@ for i in range(0, run_duration): # daily time step
     truck_num += tpe.truck_num
     
     dz = z-z_ini # calculate elevation change at each daily time step
-    dz_arr.append(sum(dz))
+    dz_arr.append(sum(dz[full_road.flatten()]))
 
     dz_cum = z-z_ini_cum # calculate cumulative elevation change
-    dz_arr_cum.append(sum(dz_cum)) 
+    dz_arr_cum.append(sum(dz_cum[full_road.flatten()])) 
     
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
     im = imshow_grid(mg,'active__depth', var_name='Active Depth', 
@@ -175,15 +188,25 @@ for i in range(0, run_duration): # daily time step
     tpe_load_ruts.append((tpe.sed_added).sum())
 
     #For plotting layer depths
-    sa_arr[i] = np.sum(mg.at_node['active__depth'])
-    ss_arr[i] = np.sum(mg.at_node['surfacing__depth'])
-    sb_arr[i] = np.sum(mg.at_node['ballast__depth'])
+    sa_arr[i] = np.sum(mg.at_node['active__depth'][full_road])
+    ss_arr[i] = np.sum(mg.at_node['surfacing__depth'][full_road])
+    sb_arr[i] = np.sum(mg.at_node['ballast__depth'][full_road])
+
+    Ma[i] = np.sum(mg.at_node['active__mass'][full_road])
+    Maf[i] = np.sum(mg.at_node['active__mass_fines'][full_road])
+    Mac[i] = np.sum(mg.at_node['active__mass_coarse'][full_road])
+    Ms[i] = np.sum(mg.at_node['surfacing__mass'][full_road])
+    Msf[i] = np.sum(mg.at_node['surfacing__mass_fines'][full_road])
+    Msc[i] = np.sum(mg.at_node['surfacing__mass_coarse'][full_road])
+    Mb[i] = np.sum(mg.at_node['ballast__mass'][full_road])
+    Mbf[i] = np.sum(mg.at_node['ballast__mass_fines'][full_road])
+    Mbc[i] = np.sum(mg.at_node['ballast__mass_coarse'][full_road])
 wall_time = time.time() - start
 print("Wall time for run:", wall_time, "s")
 
 #%% Calculations for plots
-road_mass_change_dz = np.multiply(dz_arr, (cell_area*rho_s*(1-porosity)))/2
-cum_road_mass_change_dz = np.multiply(dz_arr_cum, cell_area*rho_s*(1-porosity))/2
+road_mass_change_dz = np.divide(dz_arr,2)
+cum_road_mass_change_dz = np.divide(dz_arr_cum,2)
 
 #%% Cross section plot
 xsec_active = mg.at_node['topographic__elevation'][mg.nodes[100,:].flatten()]
@@ -228,5 +251,41 @@ ax[2].set_xlabel('Day')
 ax[2].set_ylabel('Ballast Depth\naverage [$m$]')
 ax[2].set_xlim(0,run_duration)
 plt.tight_layout()
+plt.show()
+
+
+#%% Depths over the road surface 
+fig, ax = plt.subplots(3,1, figsize=(4,7))
+
+ax[0].plot(range(0,run_duration), (Ma)/(nrows*ncols))
+ax[0].set_xlabel('Day')
+ax[0].set_ylabel('Active Mass\naverage [$kg$]')
+ax[0].set_xlim(0,run_duration)
+ax[0].set_title(r'%s ($n_{f_{road}} = %0.3f$)' %(site_name, n_f))
+
+ax[1].plot(range(0,run_duration), (Maf)/(nrows*ncols))
+ax[1].set_xlabel('Day')
+ax[1].set_ylabel('Active Mass - fines\naverage [$kg$]')
+ax[1].set_xlim(0,run_duration)
+
+ax[2].plot(range(0,run_duration), (Mac)/(nrows*ncols))
+ax[2].set_xlabel('Day')
+ax[2].set_ylabel('Active Mass - coarse\naverage [$kg$]')
+ax[2].set_xlim(0,run_duration)
+plt.tight_layout()
+plt.show()
+# %%
+# plot sediment load to the active layer in the ruts from truck passes
+plt.plot(range(0,run_duration), road_mass_change_dz)
+plt.xlabel('Day')
+plt.ylabel(r'$\Delta$ elevation from half road [$m$]')
+plt.xlim(0,run_duration)
+plt.show()
+# %%
+# plot sediment load to the active layer in the ruts from truck passes
+plt.plot(range(0,run_duration), cum_road_mass_change_dz)
+plt.xlabel('Day')
+plt.ylabel(r'cumulative elevation change from half road [$m$]')
+plt.xlim(0,run_duration)
 plt.show()
 # %%
