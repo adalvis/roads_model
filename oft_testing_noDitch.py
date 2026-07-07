@@ -12,7 +12,7 @@ np.set_printoptions(threshold=np.inf)
 from utilities.erodible_grid import Erodible_Grid
 
 # %% Define parameters
-run_duration = 100
+run_duration = 10
 
 #Physical constants
 rho_w=1000
@@ -182,7 +182,7 @@ truck_num = 0
 
 # %% Initialize Landlab components
 tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=truck_num_ini, \
-    F_af0 = 0.50, F_sf0 = 1, F_bc0 = 0.5, scat_loss=8e-4) #initialize component, 
+    F_af0 = 0.50, F_sf0 = 1, F_bc0 = 0.5, scat_loss=8e-4, porosity_c=0.35, porosity_f=0.4) #initialize component, 
 
 df = DepressionFinderAndRouter(mg, reroute_flow = True)
 df.map_depressions()
@@ -190,7 +190,7 @@ df.map_depressions()
 fa = FlowAccumulator(mg, surface='topographic__elevation', \
     flow_director="FlowDirectorD8", runoff_rate=1.538889e-6,)
 
-oft = OverlandFlowTransporter(mg, porosity=porosity, d50=d50_road, \
+oft = OverlandFlowTransporter(mg, porosity_f=0.4, porosity_c=0.35, d50=d50_road, \
     longitudinal_slope=S, tau_c=tau_c_road, n_c=n_c, n_f=n_f)
 
 # %% Intensity distribution per storm
