@@ -419,7 +419,7 @@ for i in range(0, run_duration): # daily time step
         plt.ylabel('Road length (m)')
 
         plt.tight_layout()
-        plt.savefig('output/plots_%i_days.png' %i, bbox_inches='tight', dpi=300)
+        plt.savefig('output/plots_%i_days.png' %i, bbox_inches='tight', dpi=300) #full road plots for Saf:Sac, dz_cum, and discharge
         plt.show()
         plt.close()
 
@@ -464,7 +464,7 @@ for i in range(0, run_duration): # daily time step
         plt.tight_layout()
         cax = plt.axes((1, 0.075, 0.075, 0.8))
         plt.colorbar(cax=cax, extend="both", label="Cumulative dz ($m$)")
-        plt.savefig('output/subplots_%i_days.png' %i, bbox_inches='tight')
+        plt.savefig('output/subplots_%i_days.png' %i, bbox_inches='tight') #zoomed in subplots for dz_cum
         plt.show()
 
         fig = plt.figure(figsize=(4,7))
@@ -508,7 +508,7 @@ for i in range(0, run_duration): # daily time step
         plt.tight_layout()
         cax = plt.axes((1, 0.075, 0.075, 0.8))
         plt.colorbar(cax=cax, extend="max", label="Ratio of fines to coarse in active layer ($-$)")
-        plt.savefig('output/fubplots_%i_days.png' %i, bbox_inches='tight')
+        plt.savefig('output/fubplots_%i_days.png' %i, bbox_inches='tight') #zoomed in subplots for Saf:Sac
         plt.show()
 
         fig = plt.figure(figsize=(4,7))
@@ -552,7 +552,7 @@ for i in range(0, run_duration): # daily time step
         plt.tight_layout()
         cax = plt.axes((1, 0.075, 0.075, 0.8))
         plt.colorbar(cax=cax, extend="max", label="Discharge ($m^3/s$)")
-        plt.savefig('output/hubplots_%i_days.png' %i, bbox_inches='tight')
+        plt.savefig('output/hubplots_%i_days.png' %i, bbox_inches='tight') #zoomed in subplots for discharge
         plt.show()
 
         #Append manning's n vectors
@@ -717,6 +717,14 @@ print(
 print(
     'Cumulative sediment load from road (full-road OFT calculation):', 
     np.round((total_road_mass).sum(),2), 'kg' 
+    )
+print(
+    'Cumulative sediment load from ruts (full-road OFT calculation):', 
+    np.round((mass_fillslope_rut_outflow + mass_ditch_rut_outflow).sum(),2), 'kg' 
+    )
+print(
+    'Cumulative sediment load from sides (full-road OFT calculation):', 
+    np.round((mass_fillslope_inflow + mass_ditch_inflow).sum(),2), 'kg' 
     )
 
 # %% Delta mass between time steps
