@@ -12,7 +12,7 @@ np.set_printoptions(threshold=np.inf)
 from utilities.erodible_grid import Erodible_Grid
 
 #%% Define parameters
-run_duration = 100
+run_duration = 30
 
 #Physical constants
 rho_w=1000
@@ -128,12 +128,10 @@ tpe_load_ruts = []
 
 truck_num = 0     
 #%% Initialize Landlab components
-# tpe = TruckPassErosionOLD(mg, center, half_width, full_tire, truck_num=truck_num_ini, \
-#     scat_loss=8e-5) #initialize component, 
-
 tpe = TruckPassErosion(mg, center, half_width, full_tire, truck_num=truck_num_ini, \
-    scat_loss=8e-5) #initialize component, 
+    F_af0 = 0.5, F_sf0 = 1, F_bc0 = 0.5, scat_loss=8e-3, porosity_c=0.35, porosity_f=0.35) #initialize component, 
 
+#%%
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
 Ma_ini_cum = mg.at_node['active__mass'].copy()
 Ms_ini_cum = mg.at_node['surfacing__mass'].copy()
@@ -142,6 +140,14 @@ active_init = mg.at_node['active__depth'][full_road].copy()
 surfacing_init = mg.at_node['surfacing__depth'][full_road].copy()
 ballast_init = mg.at_node['ballast__depth'][full_road].copy()
 
+#%% to overwrite output folder
+import os
+import shutil
+
+dir = 'output/'
+if os.path.exists(dir):
+    shutil.rmtree(dir)
+os.makedirs(dir)
 #%% Main loop
 start = time.time()
 for i in range(0, run_duration): # daily time step
@@ -154,35 +160,28 @@ for i in range(0, run_duration): # daily time step
     dz = z-z_ini # calculate elevation change at each daily time step
     dz_arr.append(sum(dz[full_road.flatten()]))
 
-    dz_cum = z-z_ini_cum # calculate cumulative elevation change
-    dz_arr_cum.append(sum(dz_cum[full_road.flatten()])) 
-    
-    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
-    im = imshow_grid(mg,'active__depth', var_name='Active Depth', 
-                    plot_name='Active Depth, t = %i days' %i,
-                    var_units='$m$', grid_units=('m','m'), 
-                    cmap='pink', shrink=0.9)
+    fig = plt.figure(figsize=(9,6))
+    mg.add_field('fine_frac', mg.at_node['active__depth_fines']/mg.at_node['active__depth_coarse'],\
+         at='node', units='m-', clobber=True)
+    plt.subplot(121)
+    im = imshow_grid(mg,'fine_frac', var_name='Faf', var_units='-', 
+                    plot_name='$S_{af}:S_{ac}$ in\nactive layer, t = %i days' %i,
+                    grid_units=('m','m'), cmap='pink', vmin=0, vmax=1.5, shrink=0.9)
     plt.xlabel('Road width (m)')
     plt.ylabel('Road length (m)')
-    plt.tight_layout()
-    plt.savefig('output/f_%i_days.png' %i)
-    plt.close()
-    # plt.show()
 
-    mg.add_field('dz_cum', dz_cum, at='node', units='m', clobber=True)
-    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3, 6))
+    mg.add_field('dz', dz, at='node', units='m', clobber=True)
+    plt.subplot(122)
+    im = imshow_grid(mg,'dz', var_name='dz', var_units='m', 
+                        plot_name='Elevation change, t = %i days' %i,
+                        grid_units=('m','m'), cmap='RdBu', vmin=-0.0009, vmax=0.0009, shrink=0.9)
     plt.xlabel('Road width (m)')
     plt.ylabel('Road length (m)')
-    im = imshow_grid(mg,'dz_cum', var_name='Cumulative dz', var_units='m', 
-                    plot_name='Elevation change, t = %i days' %i,
-                    grid_units=('m','m'), cmap='RdBu', vmin=-0.0009, 
-                    vmax=0.0009, shrink=0.9)
-    plt.xlabel('Road width (m)')
-    plt.ylabel('Road length (m)')
+
     plt.tight_layout()
-    plt.savefig('output/dz_cum_%i_days.png' %i)
+    plt.savefig('output/plots_%i_days.png' %i, bbox_inches='tight', dpi=300) #full road plots for Saf:Sac, dz_cum, and discharge
+    plt.show()
     plt.close()
-    # plt.show()
 
     #Append TPE loading
     tpe_load_ruts.append((tpe.sed_added).sum())
@@ -253,7 +252,6 @@ ax[2].set_xlim(0,run_duration)
 plt.tight_layout()
 plt.show()
 
-
 #%% Depths over the road surface 
 fig, ax = plt.subplots(3,1, figsize=(4,7))
 
@@ -279,13 +277,6 @@ plt.show()
 plt.plot(range(0,run_duration), road_mass_change_dz)
 plt.xlabel('Day')
 plt.ylabel(r'$\Delta$ elevation from half road [$m$]')
-plt.xlim(0,run_duration)
-plt.show()
-# %%
-# plot sediment load to the active layer in the ruts from truck passes
-plt.plot(range(0,run_duration), cum_road_mass_change_dz)
-plt.xlabel('Day')
-plt.ylabel(r'cumulative elevation change from half road [$m$]')
 plt.xlim(0,run_duration)
 plt.show()
 # %%
