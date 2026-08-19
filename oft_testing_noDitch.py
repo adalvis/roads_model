@@ -11,21 +11,33 @@ from landlab.components import OverlandFlowTransporter, FlowAccumulator, TruckPa
 np.set_printoptions(threshold=np.inf)
 from utilities.erodible_grid import Erodible_Grid
 
-# %% Define parameters
-run_duration = 120
+#%% 
+# DEFINING PARAMETERS
+#==================================
+#==================================
+# SPECIFY RUN DURATION
+#==================================
+run_duration = 120 #~4 months
 
-#Physical constants
+#==================================
+# PHYSICAL CONSTANTS
+#==================================
 rho_w=1000
 rho_s=2650
 g=9.81
 
-#Define site
+#==================================
+# DEFINE SITE AND RAIN GAUGE
+#==================================
 site_name = "MEL12"
 rain_gauge_list = ["RG_BISH05_mm","RG_BISH12_mm","RG_DEL0103_mm",\
     "RG_KID1316_mm","RG_KID46_mm","RG_MEL05_mm","RG_MEL14_mm",\
     "RG_NASE0104_mm","RG_NASE05i_mm","RG_NEWS1920_mm"]
 rain_gauge = rain_gauge_list[6]
 
+#==================================
+# SPECIFY SITE PARAMETERS
+#==================================
 #Call parameters from .csv file
 parameters = pd.read_csv("input/parameters_WY2024.csv")
 site_params = parameters.loc[parameters["Site Name"] == site_name].iloc[0]
@@ -33,50 +45,80 @@ S = site_params["Road Gradient"]/100
 porosity_c = 0.35
 porosity_f = 0.35
 
-#Define index to start model run from
+#==================================
+# MODEL RUN STARTING INDEX
+#==================================
 intensity_index = 64
 
+#==================================
+# SET RANDOM SEED
+#==================================
 seed = 1 
 np.random.seed(seed)
 
-#Intensity data in mm/hr
-intensity = pd.read_csv("input/WY2024_RG_daily_intensity.csv")
+#==================================
+# RAINFALL INTENSITY AND DURATION
+#==================================
+#Read in actual data and index for specified rain gauge
+#and starting index
+# intensity = pd.read_csv("input/WY2023_RG_daily_intensity.csv")
+# intensity_run_dur = intensity[rain_gauge].iloc[intensity_index:].values
+# dt_hours = pd.read_csv("input/WY2023_RG_daily_dt.csv")
+# dt_hours_run_dur = dt_hours[rain_gauge].iloc[intensity_index:].values 
+
+#Rainfall data for equilibrium run
+#(uncomment lines 71-74; comment other rainfall data lines)
 # intensity = np.ones(run_duration)*10
-# np.array([0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,4,4,4,4,0,0,0,0,0,0,0,0,0,0])
-# np.random.choice([0,4],size=(run_duration),p=[0.4,0.6])
+# intensity_run_dur = intensity.copy()
+# dt_hours = np.array([4 if x!=0 else 0 for x in intensity])
+# dt_hours_run_dur = dt_hours.copy()
 
-#Change the site name and index values to get different sites and dates
-intensity_90 = intensity[rain_gauge].iloc[intensity_index:].values
-# intensity_90 = intensity.copy()
+#Stochastically generated rainfall run
+#(uncomment lines 82-88)
+    #size = length of array; 
+    #zero_prob = probability there is no rainfall; 
+    #lam = mean of distribution
+def create_array_poisson(size, zero_prob, lam):  
+    is_zero = np.random.random(size) < zero_prob
+    arr = np.random.poisson(lam, size=size)
+    arr[is_zero] = 0
+    return arr
+intensity_run_dur = create_array_poisson(run_duration, 0.6, 3)
+    #change first value in np.random.poisson to change average storm duration [hrs]
+dt_hours_run_dur = np.array([np.random.poisson(4,1).item() if x!=0 else 0 for x in intensity_run_dur])
 
-#Daily storm duration in hours
-dt_hours = pd.read_csv("input/WY2024_RG_daily_dt.csv")
-dt_hours_90 = dt_hours[rain_gauge].iloc[intensity_index:].values 
-# dt_hours = np.array([4 if x==10 else 0 for x in intensity])
-# dt_hours_90 = dt_hours.copy()
 #Convert to dt to days
-dt = np.array(dt_hours_90)/24
+dt = np.array(dt_hours_run_dur)/24
 
-# initialize road layer depths
+#==================================
+# INITIALIZE ROAD LAYER DEPTHS
+#==================================
 Sa_ini = 0.019 # active depth in m
 Ss_ini = 0.23 # surfacing depth in m
 Sb_ini = 2    # ballast depth in m
 
-#Initialize average number of truck passes per day for truck pass erosion
+#==================================
+# NUMBER OF TRUCK PASSES
+#==================================
 truck_num_ini = 4
 
-#Define roughness values for fine and coarse material
+#==================================
+# ROUGHNESS VALUES
+#==================================
 n_c = 0.05
 n_f = 0.015
 
-#Define d50 and tau_c
+#==================================
+# DEFINE D50, D95, AND TAU_C
+#==================================
 d50_road = 0.0001 # [m] 
 tau_c_road = 0.146
-
 d95=0.019
 
-# %% Create the grid, add random noise, add fields
-
+# %% 
+# CREATE GRID; ADD FIELDS; ADD RANDOM NOISE
+#==================================
+#==================================
 #Parameters for grid creation
 cell_spacing = 0.1475 # cell width or length dimension in meters
 cell_area = cell_spacing**2
@@ -189,50 +231,40 @@ truck_num = 0
 df = DepressionFinderAndRouter(mg, reroute_flow = True)
 df.map_depressions()
 
-fa = FlowAccumulator(mg, surface='topographic__elevation', \
-    flow_director="FlowDirectorD8", runoff_rate=intensity_90[0]*2.77778e-7,)
+fa = FlowAccumulator(
+                    mg, 
+                    surface='topographic__elevation',
+                    flow_director="FlowDirectorD8", 
+                    runoff_rate=intensity_90[0]*2.77778e-7,
+                    )
+
+#==================================
+# UNCOMMENT FOR EQUILIBRIUM RUN
+#==================================
 # fa.accumulate_flow()
-
 # q = mg.at_node['surface_water__discharge']
-
-# im = imshow_grid(mg,'surface_water__discharge', var_name='Discharge', 
-#                         plot_name='Discharge, t = 0 days',
-#                         var_units='$m/s^3$', grid_units=('m','m'), 
-#                         cmap='Blues', vmin=0, vmax=0.00001, shrink=0.9)
-# plt.xlabel('Road width (m)')
-# plt.ylabel('Road length (m)')
-
-# #%%
 # qo = (mg.at_node['surface_water__discharge']/mg.dx)
-
 # So = mg.at_node["topographic__steepest_slope"]
 # M_c = porosity_c*d95*(1-porosity_f)*rho_s*mg.dx*mg.dy
 
 # mg.at_node['active__mass_fines'] = ((((rho_w*g*So**0.7*qo**0.6*n_f**1.5)/tau_c_road)**(10/9)-n_c)/(n_f-n_c))*M_c
-# print(mg.at_node["active__mass_fines"]/M_c)\
 
-
-# #%%
 # mg.at_node['active__mass_fines'] = [mg.at_node['active__mass_fines'][i] if mg.at_node['active__mass_fines'][i]>=0 else 0.0 for i in range(len(mg.at_node['active__mass_fines']))]
 # mg.at_node['active__mass_fines'] = [mg.at_node['active__mass_fines'][i] if mg.at_node['active__mass_fines'][i]<=M_c else M_c for i in range(len(mg.at_node['active__mass_fines']))]
-# print("Active fines", mg.at_node['active__mass_fines'])
 
-# #%%
-# print(mg.at_node["active__mass_fines"]/M_c)
-#%%
 tpe = TruckPassErosion(
                     mg, 
                     center, 
                     half_width,
                     full_tire, 
                     truck_num=truck_num_ini,
-                    F_af0 = 0.85, 
+                    F_af0 = 0.50, 
                     F_sf0 = 1, 
                     F_bc0 = 0.5, 
                     scat_loss=8e-3, 
                     porosity_c=porosity_c, 
                     porosity_f=porosity_f
-                    ) #initialize component
+                    )
 
 oft = OverlandFlowTransporter(
                             mg, 
@@ -344,9 +376,11 @@ os.makedirs(dir)
 start = time.time()
 for i in range(0, run_duration): # daily time step
     z_ini = mg.at_node['topographic__elevation'].copy()
+    #==================================
+    # UNCOMMENT FOR EQUILIBRIUM RUN
+    # AND TAB IN LINES -
     # if i >= 30 and i < run_duration-30:
     tpe.run_one_step()
-
     truck_num += tpe.truck_num
     
     intensity = intensity_90[i]  # use the i-th day's intensity
