@@ -1,4 +1,6 @@
-# %%
+#%%
+# IMPORT PACKAGES
+#==================================
 import time
 
 import matplotlib.pyplot as plt
@@ -7,7 +9,10 @@ import pandas as pd
 
 import landlab
 from landlab import RasterModelGrid, imshow_grid
-from landlab.components import OverlandFlowTransporter, FlowAccumulator, TruckPassErosion, DepressionFinderAndRouter
+from landlab.components import (OverlandFlowTransporter, 
+                               FlowAccumulator, 
+                               TruckPassErosion, 
+                               DepressionFinderAndRouter)
 np.set_printoptions(threshold=np.inf)
 from utilities.erodible_grid import Erodible_Grid
 
@@ -17,14 +22,14 @@ from utilities.erodible_grid import Erodible_Grid
 #==================================
 # SPECIFY RUN DURATION
 #==================================
-run_duration = 120 #~4 months
+run_duration = 120 #[days]; ~4 months
 
 #==================================
 # PHYSICAL CONSTANTS
 #==================================
-rho_w=1000
-rho_s=2650
-g=9.81
+rho_w=1000 #[kg/m^3]
+rho_s=2650 #[kg/m^3]
+g=9.81     #[m/s^2]
 
 #==================================
 # DEFINE SITE AND RAIN GAUGE
@@ -61,10 +66,10 @@ np.random.seed(seed)
 #==================================
 #Read in actual data and index for specified rain gauge
 #and starting index
-# intensity = pd.read_csv("input/WY2023_RG_daily_intensity.csv")
-# intensity_run_dur = intensity[rain_gauge].iloc[intensity_index:].values
-# dt_hours = pd.read_csv("input/WY2023_RG_daily_dt.csv")
-# dt_hours_run_dur = dt_hours[rain_gauge].iloc[intensity_index:].values 
+intensity = pd.read_csv("input/WY2023_RG_daily_intensity.csv")
+intensity_run_dur = intensity[rain_gauge].iloc[intensity_index:].values
+dt_hours = pd.read_csv("input/WY2023_RG_daily_dt.csv")
+dt_hours_run_dur = dt_hours[rain_gauge].iloc[intensity_index:].values 
 
 #Rainfall data for equilibrium run
 #(uncomment lines 71-74; comment other rainfall data lines)
@@ -78,14 +83,14 @@ np.random.seed(seed)
     #size = length of array; 
     #zero_prob = probability there is no rainfall; 
     #lam = mean of distribution
-def create_array_poisson(size, zero_prob, lam):  
-    is_zero = np.random.random(size) < zero_prob
-    arr = np.random.poisson(lam, size=size)
-    arr[is_zero] = 0
-    return arr
-intensity_run_dur = create_array_poisson(run_duration, 0.6, 3)
-    #change first value in np.random.poisson to change average storm duration [hrs]
-dt_hours_run_dur = np.array([np.random.poisson(4,1).item() if x!=0 else 0 for x in intensity_run_dur])
+# def create_array_poisson(size, zero_prob, lam):  
+#     is_zero = np.random.random(size) < zero_prob
+#     arr = np.random.poisson(lam, size=size)
+#     arr[is_zero] = 0
+#     return arr
+# intensity_run_dur = create_array_poisson(run_duration, 0.6, 3)
+#     #change first value in np.random.poisson to change average storm duration [hrs]
+# dt_hours_run_dur = np.array([np.random.poisson(4,1).item() if x!=0 else 0 for x in intensity_run_dur])
 
 #Convert to dt to days
 dt = np.array(dt_hours_run_dur)/24
@@ -100,7 +105,7 @@ Sb_ini = 2    # ballast depth in m
 #==================================
 # NUMBER OF TRUCK PASSES
 #==================================
-truck_num_ini = 4
+truck_num_ini = 7
 
 #==================================
 # ROUGHNESS VALUES
@@ -131,7 +136,8 @@ half_width = 7
 full_tire = False
 
 eg = Erodible_Grid(nrows=nrows, ncols=ncols,\
-    spacing=cell_spacing, full_tire=full_tire, long_slope=S,road_peak=center,ditch=False)
+    spacing=cell_spacing, full_tire=full_tire, \
+    long_slope=S, road_peak=center, ditch=False)
 
 mg, z, road_flag, n = eg() 
 
@@ -171,7 +177,9 @@ Y = mg.node_y.reshape(mg.shape)
 Z = z.reshape(mg.shape)
 
 xsec_pre = mg.at_node['topographic__elevation'][mg.nodes[100,:].flatten()].copy()
-# %% Prep arrays/lists
+#%% 
+# PREP OUTPUT ARRAYS/LISTS
+#==================================
 mask = road_flag
 intensity_arr=[]
 dt_arr = []
@@ -194,7 +202,6 @@ Msc = np.zeros(run_duration)
 Mb = np.zeros(run_duration)
 Mbf = np.zeros(run_duration)
 Mbc = np.zeros(run_duration)
-
 
 #Flux/mass arrays
 mass_fillslope_inflow = np.zeros(run_duration)
@@ -227,7 +234,9 @@ fs_avg_road = []
 
 truck_num = 0     
 
-# %% Initialize Landlab components
+# %% 
+# INITIALIZE LANDLAB COMPONENTS
+#==================================
 df = DepressionFinderAndRouter(mg, reroute_flow = True)
 df.map_depressions()
 
@@ -235,7 +244,7 @@ fa = FlowAccumulator(
                     mg, 
                     surface='topographic__elevation',
                     flow_director="FlowDirectorD8", 
-                    runoff_rate=intensity_90[0]*2.77778e-7,
+                    runoff_rate=intensity_run_dur[0]*2.77778e-7,
                     )
 
 #==================================
@@ -277,7 +286,9 @@ oft = OverlandFlowTransporter(
                             n_f=n_f
                             )
 
-# %% Intensity distribution per storm
+#%% 
+# PER STORM INTENSITY DIST
+#==================================
 p = np.linspace(0.0001, 35, 1000)
 def pdf(p, p_mean):
     p_prime = p/p_mean
@@ -356,7 +367,12 @@ p_prime_arr = p_prime_arr(prob_arr)
 # ax.set_title('CDF w.r.t. nondimensionalized precipitation')
 # plt.show()
 
-# %% Main loop
+#%% 
+# MAIN MODEL LOOP
+#==================================
+#==================================
+# INITIAL DEPTHS AND MASSES FOR DIFF
+#==================================
 z_ini_cum = mg.at_node['topographic__elevation'].copy()
 Ma_ini_cum = mg.at_node['active__mass'].copy()
 Ms_ini_cum = mg.at_node['surfacing__mass'].copy()
@@ -365,6 +381,9 @@ active_init = mg.at_node['active__depth'][full_road].copy()
 surfacing_init = mg.at_node['surfacing__depth'][full_road].copy()
 ballast_init = mg.at_node['ballast__depth'][full_road].copy()
 
+#==================================
+# CREATE OUTPUT FOLDER
+#==================================
 import os
 import shutil
 
@@ -373,19 +392,26 @@ if os.path.exists(dir):
     shutil.rmtree(dir)
 os.makedirs(dir)
 
+#==================================
+# START MODEL LOOP
+#==================================
 start = time.time()
 for i in range(0, run_duration): # daily time step
     z_ini = mg.at_node['topographic__elevation'].copy()
     #==================================
     # UNCOMMENT FOR EQUILIBRIUM RUN
-    # AND TAB IN LINES -
+    # AND TAB IN LINES 386-387
+    #==================================
     # if i >= 30 and i < run_duration-30:
     tpe.run_one_step()
     truck_num += tpe.truck_num
     
-    intensity = intensity_90[i]  # use the i-th day's intensity
+    intensity = intensity_run_dur[i]  # use the i-th day's intensity
     dt_day = dt[i] # use the i-th day's time step
 
+    #==================================
+    # NO RAINFALL
+    #==================================
     if intensity <= 0:
         print(f"Day {i}: No rainfall")
         rain_m_per_s = intensity * 2.77778e-7 # conversion to m/s
@@ -433,6 +459,9 @@ for i in range(0, run_duration): # daily time step
         Mbf[i] = np.sum(mg.at_node['ballast__mass_fines'])
         Mbc[i] = np.sum(mg.at_node['ballast__mass_coarse'])
 
+    #==================================
+    # RAINFALL
+    #==================================
     else:
         intensity_arr.append(intensity)
         print(f"Day {i}: Average Intensity = {intensity:.2f} mm/hr")
@@ -441,6 +470,9 @@ for i in range(0, run_duration): # daily time step
         
         road_shear_i[:] = 0
 
+        #==================================
+        # DISCRETIZE RAINFALL
+        # ==================================
         for j, storm_frac in enumerate(frac_arr):
             intensity_dist = p_prime_arr[j]*intensity
             dt_frac = storm_frac*dt_day
@@ -461,11 +493,6 @@ for i in range(0, run_duration): # daily time step
             mass_fillslope_inflow[i] += mass_fillslope_inflow_i
             mass_fillslope_rut_outflow[i] += mass_fillslope_rut_outflow_i
 
-            # mg.at_node["active__mass_fines"][mg.nodes[0,0:33]] -= mg.at_node["sediment__mass_influx"][mg.nodes[0,0:33]]
-            # mg.at_node["active__mass_fines"][mg.nodes[1:,0]] -= mg.at_node["sediment__mass_influx"][mg.nodes[1:,0]]
-            # mg.at_node["active__mass_fines"][mg.nodes[1:,63]] -= mg.at_node["sediment__mass_influx"][mg.nodes[1:,63]]
-            # mg.at_node["active__mass_fines"][mg.nodes[0,33:64]] -= mg.at_node["sediment__mass_influx"][mg.nodes[0,33:64]]
-
             mg.at_node['shear_stress'] = oft.shear_stress
             road_shear = oft.shear_stress[full_road].flatten()
 
@@ -473,12 +500,6 @@ for i in range(0, run_duration): # daily time step
                  else False for x, shear_stress in enumerate(road_shear)])
             road_shear_cum = np.array([True if shear_stress>=tau_c_road or road_shear_cum[x]==True\
                  else False for x, shear_stress in enumerate(road_shear)])
-
-
-        # print("Minimum unit discharge:", min(oft._unit_discharge))
-        # print("Maximum unit discharge:", max(oft._unit_discharge))
-        # print("Minimum discharge:", min(oft._discharge))
-        # print("Maximum discharge:", max(oft._discharge))
 
         road_shear_frac_arr[i] = road_shear_i[road_shear_i==True].sum()/len(road_shear_i)
         road_shear_cum_arr[i] = road_shear_cum[road_shear_cum==True].sum()/len(road_shear_cum)
@@ -496,8 +517,10 @@ for i in range(0, run_duration): # daily time step
 
         dz_cum = z-z_ini_cum # calculate cumulative elevation change
         dz_arr_cum.append(sum(dz_cum[full_road.flatten()])) 
-        
 
+        #==================================
+        # FIGURES FOR GIF CREATION - 1ST GIF
+        #==================================
         fig = plt.figure(figsize=(9,6))
         mg.add_field('fine_frac', mg.at_node['active__depth_fines']/mg.at_node['active__depth_coarse'], at='node', units='m-', clobber=True)
         plt.subplot(131)
@@ -524,10 +547,13 @@ for i in range(0, run_duration): # daily time step
         plt.ylabel('Road length (m)')
 
         plt.tight_layout()
-        plt.savefig('output/plots_%i_days.png' %i, bbox_inches='tight', dpi=300) #full road plots for Saf:Sac, dz_cum, and discharge
-        plt.show()
+        plt.savefig('output/plots_%i_days.png' %i, \
+            bbox_inches='tight', dpi=300) #full road plots for Saf:Sac, dz_cum, and discharge
         plt.close()
 
+        #==================================
+        # FIGURES FOR GIF CREATION - 2ND GIF
+        #==================================
         fig = plt.figure(figsize=(4,7))
         plt.subplot(321,)
         im1 = imshow_grid(mg,'dz_cum', cmap='RdBu', plot_name="Upper Left",
@@ -570,8 +596,11 @@ for i in range(0, run_duration): # daily time step
         cax = plt.axes((1, 0.075, 0.075, 0.8))
         plt.colorbar(cax=cax, extend="both", label="Cumulative dz ($m$)")
         plt.savefig('output/subplots_%i_days.png' %i, bbox_inches='tight') #zoomed in subplots for dz_cum
-        plt.show()
+        plt.close()
 
+        #==================================
+        # FIGURES FOR GIF CREATION - 3RD GIF
+        #==================================
         fig = plt.figure(figsize=(4,7))
         plt.subplot(321,)
         im1 = imshow_grid(mg,'fine_frac', cmap='Dark2', plot_name="Upper Left",
@@ -614,8 +643,11 @@ for i in range(0, run_duration): # daily time step
         cax = plt.axes((1, 0.075, 0.075, 0.8))
         plt.colorbar(cax=cax, extend="max", label="Ratio of fines to coarse in active layer ($-$)")
         plt.savefig('output/fubplots_%i_days.png' %i, bbox_inches='tight') #zoomed in subplots for Saf:Sac
-        plt.show()
+        plt.close()
 
+        #==================================
+        # FIGURES FOR GIF CREATION - 4TH GIF
+        #==================================
         fig = plt.figure(figsize=(4,7))
         plt.subplot(321,)
         im1 = imshow_grid(mg,'surface_water__discharge', cmap='Blues', plot_name="Upper Left",
@@ -658,7 +690,7 @@ for i in range(0, run_duration): # daily time step
         cax = plt.axes((1, 0.075, 0.075, 0.8))
         plt.colorbar(cax=cax, extend="max", label="Discharge ($m^3/s$)")
         plt.savefig('output/hubplots_%i_days.png' %i, bbox_inches='tight') #zoomed in subplots for discharge
-        plt.show()
+        plt.close()
 
         #Append manning's n vectors
         avg_n_ruts.append(np.nanmean(mg.at_node['total__roughness'][ruts]))
@@ -689,12 +721,16 @@ for i in range(0, run_duration): # daily time step
 wall_time = time.time() - start
 print("Wall time for run:", wall_time, "s")
 
-# %% Calculations for plots
+#%% 
+# FINAL CALCS FOR PLOTS
+#==================================
 road_elev_change_dz = np.divide(dz_arr,2)/(540*64/2)
 cum_road_elev_change_dz = np.divide(dz_arr_cum,2)/(540*64/2)
 
 cum_road_mass_change_oft = road_mass_change_oft.cumsum()
-# %% GIF creation
+#%% 
+# GIF CREATION
+#==================================
 from PIL import Image
 import glob
 
@@ -765,7 +801,9 @@ image_list_f[0].save(
             loop=0)
 
 
-# %% Cross section plot
+#%%
+# CROSS SECTION PLOT
+#==================================
 xsec_active = mg.at_node['topographic__elevation'][mg.nodes[100,:].flatten()]
 xsec_surf =  mg.at_node['surfacing__elevation'][mg.nodes[100,:].flatten()] 
 xsec_ball = mg.at_node['ballast__elevation'][mg.nodes[100,:].flatten()]
@@ -781,7 +819,9 @@ plt.ylabel('Elevation (m)')
 plt.legend()
 plt.show()
 
-# %% Rainfall plots
+#%% 
+# RAINFALL PLOTS
+#==================================
 fig, ax = plt.subplots(2,1)
 ax[0].bar(range(0,run_duration), np.multiply(intensity_arr,np.multiply(dt_arr,24)))
 ax[0].set_xlabel('Day')
@@ -796,7 +836,9 @@ plt.suptitle(r'%s' %site_name)
 plt.tight_layout()
 plt.show()
 
-# %% Important model output
+#%% 
+# IMPORTANT MODEL OUTPUT
+#==================================
 print(
     "Total rainfall,",
     run_duration, "days:", 
@@ -807,27 +849,29 @@ print(
     np.round(mg.at_node['sediment__added'].sum(),2), 'kg'
     )
 print(
-    'Cumulative sediment load from road (half-road OFT calculation):', 
+    'Cumulative sediment load from cutslope side of road:', 
     np.round((mass_ditch_inflow + mass_ditch_rut_outflow).sum(),2), 'kg' 
     )
 print(
-    'Cumulative sediment load from road (half-road OFT calculation - fillslope side):', 
+    'Cumulative sediment load from fillslope side of road:', 
     np.round((mass_fillslope_inflow + mass_fillslope_rut_outflow).sum(),2), 'kg' 
     )
 print(
-    'Cumulative sediment load from ruts (full-road OFT calculation):', 
+    'Cumulative sediment load from both ruts:', 
     np.round((mass_fillslope_rut_outflow + mass_ditch_rut_outflow).sum(),2), 'kg' 
     )
 print(
-    'Cumulative sediment load from sides (full-road OFT calculation):', 
+    'Cumulative sediment load from both sides:', 
     np.round((mass_fillslope_inflow + mass_ditch_inflow).sum(),2), 'kg' 
     )
 print(
-    'Cumulative sediment load from road (full-road OFT calculation):', 
+    'Cumulative sediment load from full road:', 
     np.round((total_road_mass).sum(),2), 'kg' 
     )
 
-# %% Delta mass between time steps
+#%% 
+# DELTA MASS AND ELEV BTWN TIME STEPS
+#==================================
 fig, ax = plt.subplots(1,2, figsize=(9,4))
 
 # plot total mass change between time steps on the road
@@ -848,7 +892,9 @@ ax[1].set_title('(b) Half Road (dz)')
 plt.tight_layout()
 plt.show()
 
-# %% Cumulative mass change
+#%% 
+# CUMULATIVE MASS AND ELEV CHANGE
+#==================================
 fig, ax = plt.subplots(1,2, figsize=(9,4))
 
 ax[0].plot(range(0,run_duration), -cum_road_mass_change_oft)
@@ -868,7 +914,9 @@ ax[1].set_title('(b) Half Road (dz)')
 plt.tight_layout()
 plt.show()
 
-# %% TPE loading
+#%% 
+# TPE loading
+#==================================
 # plot sediment load to the active layer in the ruts from truck passes
 plt.plot(range(0,run_duration), tpe_load_ruts)
 plt.xlabel('Day')
@@ -876,7 +924,9 @@ plt.ylabel('Cumulative sediment load to the active layer in the ruts \nfrom TPE 
 plt.xlim(0,run_duration)
 plt.show()
 
-# %% Total depths over the road surface 
+#%% 
+# AVERAGE LAYER DEPTHS
+#================================== 
 fig, ax = plt.subplots(3,1, figsize=(4,7))
 
 ax[0].set_title(r'%s ($n_{f_{road}} = %0.3f$)' %(site_name, n_f))
@@ -897,7 +947,9 @@ ax[2].set_xlim(0,run_duration)
 plt.tight_layout()
 plt.show()
 
-#%% Masses over the road surface  
+#%% 
+# AVERAGE LAYER MASSES
+#==================================  
 fig, ax = plt.subplots(3,1, figsize=(4,7))
 ax[0].plot(range(0,run_duration), (Ma)/(nrows*ncols))
 ax[0].set_xlabel('Day')
