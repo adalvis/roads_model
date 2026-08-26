@@ -105,7 +105,7 @@ Sb_ini = 2    # ballast depth in m
 #==================================
 # NUMBER OF TRUCK PASSES
 #==================================
-truck_num_ini = 7
+truck_num_ini = 4
 
 #==================================
 # ROUGHNESS VALUES
@@ -845,7 +845,15 @@ print(
     np.round(sum(np.multiply(intensity_arr,np.multiply(dt_arr,24)),2)), 'mm'
     )
 print(
-    'Sediment pumped:', 
+    'Fine sediment pumped:', 
+    np.round(mg.at_node['sediment__pumped'].sum(),2), 'kg'
+    )
+print(
+    'Fine sediment made available due to scattering:', 
+    np.round(mg.at_node['sediment__scattered'].sum(),2), 'kg'
+    )
+print(
+    'Total sediment added to the active layer:', 
     np.round(mg.at_node['sediment__added'].sum(),2), 'kg'
     )
 print(
