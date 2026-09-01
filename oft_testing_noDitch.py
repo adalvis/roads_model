@@ -58,7 +58,7 @@ intensity_index = 64
 #==================================
 # SET RANDOM SEED
 #==================================
-seed = 1 
+seed = 85
 np.random.seed(seed)
 
 #==================================
@@ -131,7 +131,7 @@ nrows = 540 # number of rows in the grid
 ncols = 64  # number of columns in the grid (NO DITCH)
 
 #We're using half tire width for node spacing
-center = 32
+center = int(ncols/2-1)
 half_width = 7 
 full_tire = False
 
@@ -283,7 +283,8 @@ oft = OverlandFlowTransporter(
                             longitudinal_slope=S, 
                             tau_c=tau_c_road, 
                             n_c=n_c, 
-                            n_f=n_f
+                            n_f=n_f,
+                            flow_accumulator=fa
                             )
 
 #%% 
