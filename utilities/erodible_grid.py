@@ -64,7 +64,10 @@ class Erodible_Grid(Component):
                         road_flag[g*ncols+h] = flag #update road_flag based on x & y locations
                 elif ditch==False:
                     for h in range(ncols):
-                        if h <= road_peak:
+                        if h == 0 or h==(ncols-1):
+                            elev = 0
+                            flag = True
+                        elif h <= road_peak:
                             elev += up
                             flag = True
                         else:
