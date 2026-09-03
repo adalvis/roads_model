@@ -58,7 +58,7 @@ intensity_index = 64
 #==================================
 # SET RANDOM SEED
 #==================================
-seed = 85
+seed = 0
 np.random.seed(seed)
 
 #==================================
@@ -105,7 +105,7 @@ Sb_ini = 2    # ballast depth in m
 #==================================
 # NUMBER OF TRUCK PASSES
 #==================================
-truck_num_ini = 4
+truck_num_ini = 7
 
 #==================================
 # ROUGHNESS VALUES
@@ -128,10 +128,10 @@ d95=0.019
 cell_spacing = 0.1475 # cell width or length dimension in meters
 cell_area = cell_spacing**2
 nrows = 540 # number of rows in the grid
-ncols = 64  # number of columns in the grid (NO DITCH)
+ncols = 65  # number of columns in the grid (NO DITCH)
 
 #We're using half tire width for node spacing
-center = int(ncols/2-1)
+center = int(np.ceil(ncols/2-1))
 half_width = 7 
 full_tire = False
 
@@ -284,7 +284,8 @@ oft = OverlandFlowTransporter(
                             tau_c=tau_c_road, 
                             n_c=n_c, 
                             n_f=n_f,
-                            flow_accumulator=fa
+                            flow_accumulator=fa,
+                            depression_finder=df
                             )
 
 #%% 
@@ -484,10 +485,10 @@ for i in range(0, run_duration): # daily time step
             df.map_depressions()
             oft.run_one_step(dt_frac)
 
-            mass_ditch_rut_outflow_i = (mg.at_node["sediment__mass_influx"][mg.nodes[0,0:33]]).sum()*dt_frac*86400
+            mass_ditch_rut_outflow_i = (mg.at_node["sediment__mass_influx"][mg.nodes[0,0:center]]).sum()*dt_frac*86400
             mass_ditch_inflow_i = (mg.at_node["sediment__mass_influx"][mg.nodes[1:,0]]).sum()*dt_frac*86400
-            mass_fillslope_inflow_i = (mg.at_node["sediment__mass_influx"][mg.nodes[1:,63]]).sum()*dt_frac*86400
-            mass_fillslope_rut_outflow_i = (mg.at_node["sediment__mass_influx"][mg.nodes[0,33:64]]).sum()*dt_frac*86400
+            mass_fillslope_inflow_i = (mg.at_node["sediment__mass_influx"][mg.nodes[1:,(ncols-1)]]).sum()*dt_frac*86400
+            mass_fillslope_rut_outflow_i = (mg.at_node["sediment__mass_influx"][mg.nodes[0,(center+1):ncols]]).sum()*dt_frac*86400
 
             mass_ditch_rut_outflow[i] += mass_ditch_rut_outflow_i
             mass_ditch_inflow[i] += mass_ditch_inflow_i
