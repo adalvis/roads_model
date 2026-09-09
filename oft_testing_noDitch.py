@@ -73,7 +73,7 @@ dt_hours_run_dur = dt_hours[rain_gauge].iloc[intensity_index:].values
 
 #Rainfall data for equilibrium run
 #(uncomment lines 71-74; comment other rainfall data lines)
-# intensity = np.ones(run_duration)*10
+# intensity = np.ones(run_duration)*2
 # intensity_run_dur = intensity.copy()
 # dt_hours = np.array([4 if x!=0 else 0 for x in intensity])
 # dt_hours_run_dur = dt_hours.copy()
@@ -270,7 +270,7 @@ tpe = TruckPassErosion(
                     F_af0 = 0.50, 
                     F_sf0 = 1, 
                     F_bc0 = 0.5, 
-                    scat_loss=8e-3, 
+                    scat_loss=8e-4, 
                     porosity_c=porosity_c, 
                     porosity_f=porosity_f
                     )
