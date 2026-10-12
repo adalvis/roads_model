@@ -22,7 +22,7 @@ from utilities.erodible_grid import Erodible_Grid
 #==================================
 # SPECIFY RUN DURATION
 #==================================
-run_duration = 120 #[days]; ~4 months
+run_duration = 30 #[days]; ~4 months
 
 #==================================
 # PHYSICAL CONSTANTS
@@ -35,10 +35,10 @@ g=9.81     #[m/s^2]
 # DEFINE SITE AND RAIN GAUGE
 #==================================
 site_name = "MEL12"
-rain_gauge_list = ["RG_BISH05_mm","RG_BISH12_mm","RG_DEL0103_mm",\
+rain_gauge_list = ["RG_BISH05_mm","RG_BISH12_mm","RG_DEL0103_mm","RG_KID0105_mm",\
     "RG_KID1316_mm","RG_KID46_mm","RG_MEL05_mm","RG_MEL14_mm",\
     "RG_NASE0104_mm","RG_NASE05i_mm","RG_NEWS1920_mm"]
-rain_gauge = rain_gauge_list[6]
+rain_gauge = rain_gauge_list[7] #MEL14
 
 #==================================
 # SPECIFY SITE PARAMETERS
@@ -53,7 +53,7 @@ porosity_f = 0.35
 #==================================
 # MODEL RUN STARTING INDEX
 #==================================
-intensity_index = 64
+intensity_index = 62
 
 #==================================
 # SET RANDOM SEED
@@ -105,7 +105,7 @@ Sb_ini = 2    # ballast depth in m
 #==================================
 # NUMBER OF TRUCK PASSES
 #==================================
-truck_num_ini = 7
+truck_num_ini = 2
 
 #==================================
 # ROUGHNESS VALUES
@@ -141,7 +141,7 @@ eg = Erodible_Grid(nrows=nrows, ncols=ncols,\
 
 mg, z, road_flag, n = eg() 
 
-noise_amplitude=0.005
+noise_amplitude=0.01
 road = road_flag==1
 
 random=np.random.rand(
@@ -158,8 +158,8 @@ ball_depth = mg.add_ones('ballast__depth', at='node')
 ball_depth *= Sb_ini
 
 # %% Pre-define location indices
-ruts = [mg.nodes[1:-1, 26-8:40-8], mg.nodes[1:-1, 41-8:55-8]]
-half_road = mg.nodes[1:-1, 1:33]
+ruts = [mg.nodes[1:-1, 26-8:40-8], mg.nodes[1:-1, 41-8:55-8]] #[mg.nodes[1:-1, center-half_width-3:center-4], mg.nodes[1:-1, center+5:center+half_width+4]]
+half_road = mg.nodes[1:-1, 1:center]
 full_road = mg.core_nodes
 
 # %% DEM plot
@@ -267,13 +267,12 @@ tpe = TruckPassErosion(
                     half_width,
                     full_tire, 
                     truck_num=truck_num_ini,
-                    F_af0 = 0.85, 
+                    F_af0 = 0.50, 
                     F_sf0 = 1, 
                     F_bc0 = 0.5, 
                     scat_loss=8e-4, 
                     porosity_c=porosity_c, 
                     porosity_f=porosity_f,
-                    rand_seed=seed,
                     )
 
 oft = OverlandFlowTransporter(
