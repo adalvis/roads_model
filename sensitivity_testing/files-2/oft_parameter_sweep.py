@@ -47,12 +47,18 @@ if __name__ == "__main__":
  
     if RUN_SINGLE_PARAM_SWEEP:
 
-        SWEEP_PARAM = "truck_num_ini"  # the run_realization() keyword argument to vary
+        SWEEP_PARAM = "truck_num_ini"  # the run_realization() keyword argument to varyy
     #may or may not have to update code with type as int (truck_num for example)
-        SWEEP_VALUES = [5, 8, 10]  # the values to test it at
+        SWEEP_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50]
+        #SWEEP_VALUES = [1e-4, 1e-3, 1e-2]  # the values to test it at
+        #PARAM_OVERRIDES = {"F_af0": 0.85}
+        #PARAM_OVERRIDES = {"F_af0": 0.25}
+        #PARAM_OVERRIDES = {"u_ps": 0}
+        PARAM_OVERRIDES = {"scat_loss": 8e-5, "S": 0.10, "compression":7e-3, "u_ps": 2e-1}
+        #PARAM_OVERRIDES = {"scat_loss": 8e-5}
 
         PARAM_SWEEP = [
-         {"name": f"{SWEEP_PARAM}={v:g}", SWEEP_PARAM: v}
+         {"name": f"{SWEEP_PARAM}={v:g}", SWEEP_PARAM: v, **PARAM_OVERRIDES}
             for v in SWEEP_VALUES
         ]
 
@@ -416,59 +422,67 @@ if __name__ == "__main__":
             plot_metric_sweep(lambda res: res["tpe_load_ruts"][-1],
                                ylabel="Cumulative TPE load to ruts [kg]",
                                title=f"TPE sediment load to ruts vs. {SWEEP_PARAM}")
+
+            # ------ RUTS ONLY: layer mass states (mean kg per rut node, end of run) ------
+            for key, label in [
+                ("Maf_ruts", "Active-layer fines"),
+                ("Mac_ruts", "Active-layer coarse"),
+                ("Msf_ruts", "Surfacing-layer fines"),
+                ("Msc_ruts", "Surfacing-layer coarse"),
+                ("Mbf_ruts", "Ballast-layer fines"),
+                ("Mbc_ruts", "Ballast-layer coarse"),
+            ]:
+                plot_metric_sweep(lambda res, k=key: res[k][-1],
+                                  ylabel=f"{label} mass in ruts, end of run [kg/node]",
+                                  title=f"{label} mass (ruts) vs. {SWEEP_PARAM}")
+
+            # ------ RUTS ONLY: change from the true initial state ------
+            for key, label in [
+                ("Maf_ruts", "Active-layer fines"),
+                ("Mac_ruts", "Active-layer coarse"),
+                ("Msf_ruts", "Surfacing-layer fines"),
+                ("Msc_ruts", "Surfacing-layer coarse"),
+            ]:
+                plot_metric_sweep(lambda res, k=key: res[k][-1] - res["rut_ini"][k],
+                                  ylabel=f"{label} mass change in ruts [kg/node]",
+                                  title=f"{label} mass change (ruts) vs. {SWEEP_PARAM}")
+
+            # ------ RUTS ONLY: fines fractions ------
+            plot_metric_sweep(lambda res: res["Maf_ruts"][-1] / (res["Maf_ruts"][-1] + res["Mac_ruts"][-1]),
+                              ylabel="Fines mass fraction, active layer, ruts [-]",
+                              title=f"Active-layer fines fraction (ruts) vs. {SWEEP_PARAM}")
+
+            plot_metric_sweep(lambda res: res["Msf_ruts"][-1] / (res["Msf_ruts"][-1] + res["Msc_ruts"][-1]),
+                              ylabel="Fines mass fraction, surfacing layer, ruts [-]",
+                              title=f"Surfacing-layer fines fraction (ruts) vs. {SWEEP_PARAM}")
+
+            plot_metric_sweep(lambda res: res["Mbf_ruts"][-1] / (res["Mbf_ruts"][-1] + res["Mbc_ruts"][-1]),
+                              ylabel="Fines mass fraction, ballast layer, ruts [-]",
+                              title=f"Ballast-layer fines fraction (ruts) vs. {SWEEP_PARAM}")
+
+            # Saf:Sac in the ruts -- the same quantity as your fine_frac map
+            plot_metric_sweep(lambda res: res["faf_ratio_ruts"][-1],
+                              ylabel="Saf:Sac in ruts, end of run [-]",
+                              title=f"Active-layer Saf:Sac (ruts) vs. {SWEEP_PARAM}")
+
+            plot_metric_sweep(lambda res: res["faf_ratio_ruts"][-1] - res["faf_ratio_ruts_ini"],
+                              ylabel="Change in Saf:Sac in ruts [-]",
+                              title=f"Change in Saf:Sac (ruts) vs. {SWEEP_PARAM}")
+
+            # ------ RUTS ONLY: partitioning and roughness (already saved by the core) ------
+            plot_metric_sweep(lambda res: np.nanmean(res["fs_avg_ruts"]),
+                              ylabel="Mean fs over the run, ruts only [-]",
+                              title=f"Run-mean shear partitioning (ruts) vs. {SWEEP_PARAM}")
+
+            plot_metric_sweep(lambda res: np.nanmin(res["fs_avg_ruts"]),
+                              ylabel="Minimum fs during the run, ruts only [-]",
+                              title=f"Minimum shear partitioning (ruts) vs. {SWEEP_PARAM}")
+
+            plot_metric_sweep(lambda res: res["avg_n_ruts"][-1],
+                              ylabel="Mean roughness n, ruts only, end of run [-]",
+                              title=f"Roughness in ruts vs. {SWEEP_PARAM}")
             
             # ------ porosity decay time series, ALL settings and ALL seeds on one figure ------
-            fig, ax = plt.subplots(figsize=(8, 5))
-            cmap = plt.get_cmap("viridis")
-            for i, name in enumerate(sweep_labels):
-                runs = sweep_results[name]
-                color = cmap(i / max(len(sweep_labels) - 1, 1))
-                for seed_idx, res in enumerate(runs):
-                    ax.plot(range(res["run_duration"]), res["phi_c_a_ruts_min"], color=color,
-                            alpha=0.4, linewidth=0.8,
-                            label=name if seed_idx == 0 else None)  # one legend entry per setting
-            ax.axhline(0.31, color="black", linestyle="--", linewidth=1, label="phi_limit = 0.31")
-            ax.set_xlabel("Day")
-            ax.set_ylabel("Min Active-layer coarse porosity in ruts [-]")
-            ax.set_title("Porosity decay vs. day, all settings and seeds")
-            ax.legend(fontsize=7, ncol=2)
-            plt.tight_layout()
-            plt.show()
-
-            fig, ax = plt.subplots(figsize=(8, 5))
-            cmap = plt.get_cmap("viridis")
-            for i, name in enumerate(sweep_labels):
-                runs = sweep_results[name]
-                color = cmap(i / max(len(sweep_labels) - 1, 1))
-                for seed_idx, res in enumerate(runs):
-                    ax.plot(range(res["run_duration"]), res["phi_c_s_ruts_min"], color=color,
-                            alpha=0.4, linewidth=0.8,
-                            label=name if seed_idx == 0 else None)  # one legend entry per setting
-            ax.axhline(0.31, color="black", linestyle="--", linewidth=1, label="phi_limit = 0.31")
-            ax.set_xlabel("Day")
-            ax.set_ylabel("Min Surfacing-layer coarse porosity in ruts [-]")
-            ax.set_title("Porosity decay vs. day, all settings and seeds")
-            ax.legend(fontsize=7, ncol=2)
-            plt.tight_layout()
-            plt.show()
-
-            fig, ax = plt.subplots(figsize=(8, 5))
-            cmap = plt.get_cmap("viridis")
-            for i, name in enumerate(sweep_labels):
-                runs = sweep_results[name]
-                color = cmap(i / max(len(sweep_labels) - 1, 1))
-                for seed_idx, res in enumerate(runs):
-                    ax.plot(range(res["run_duration"]), res["phi_f_s_ruts_min"], color=color,
-                            alpha=0.4, linewidth=0.8,
-                            label=name if seed_idx == 0 else None)  # one legend entry per setting
-            ax.axhline(0.31, color="black", linestyle="--", linewidth=1, label="phi_limit = 0.31")
-            ax.set_xlabel("Day")
-            ax.set_ylabel("Min Surfacing-layer fine porosity in ruts [-]")
-            ax.set_title("Porosity decay vs. day, all settings and seeds")
-            ax.legend(fontsize=7, ncol=2)
-            plt.tight_layout()
-            plt.show()
-
             fig, ax = plt.subplots(figsize=(8, 5))
             cmap = plt.get_cmap("viridis")
             for i, name in enumerate(sweep_labels):
@@ -486,6 +500,39 @@ if __name__ == "__main__":
             plt.tight_layout()
             plt.show()
 
+            # ---- scattered/total and pumped/total, one graph, every seed ----
+            x = np.array(SWEEP_VALUES)
+
+            def frac(key, res):
+                total = res["sediment_added_kg"]
+                total = res["sediment_added_kg"]    
+                return res[key] / total if total > 0 else np.nan
+
+            scat_frac = np.array([[frac("fine_sediment_scattered_kg", r) for r in sweep_results[name]]
+                                for name in sweep_labels])      # shape (n_settings, n_seeds)
+            pump_frac = np.array([[frac("fine_sediment_pumped_kg", r) for r in sweep_results[name]]
+                                for name in sweep_labels])
+
+            # sanity check: the two fractions should add to 1 (total = scattered + pumped)
+            print("max |scattered/total + pumped/total - 1| =",
+                np.nanmax(np.abs(scat_frac + pump_frac - 1)))
+
+            fig, ax = plt.subplots(figsize=(7, 5))
+            for seed_idx in range(scat_frac.shape[1]):
+                ax.plot(x, scat_frac[:, seed_idx], color="tab:orange", alpha=0.5,
+                    marker="o", markersize=3, linewidth=1,
+                    label="Scattered / total" if seed_idx == 0 else None)
+                ax.plot(x, pump_frac[:, seed_idx], color="tab:blue", alpha=0.5,
+                    marker="o", markersize=3, linewidth=1,
+                    label="Pumped / total" if seed_idx == 0 else None)
+                ax.set_xlabel(SWEEP_PARAM)
+                ax.set_ylabel("Fraction of total sediment added to active layer [-]")
+                ax.set_title(f"Scattered vs. pumped share of added sediment vs. {SWEEP_PARAM}")
+                ax.set_ylim(0, 1)
+                ax.legend(fontsize=8)
+                plt.tight_layout()
+                plt.show()
+
         else:
             print("\nSkipped additional metric sweeps: this PARAM_SWEEP isn't a single "
                   "SWEEP_PARAM range (e.g. you're using the 'several different "
@@ -495,55 +542,63 @@ if __name__ == "__main__":
         # =========================================================================
         # TWO PARAMETER SWEEP
         # =========================================================================
-        GRID_PARAM_1 = "compression"
-        GRID_VALUES_1 = [1e-4, 4e-4, 7e-4, 1e-3]
+        GRID_PARAM_1 = "u_ps"
+        GRID_VALUES_1 = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5]
  
         GRID_PARAM_2 = "truck_num_ini"
-        GRID_VALUES_2 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        GRID_VALUES_2 = [1, 2, 3, 4, 5, 7, 9, 10]
  
-        N_REALIZATIONS_PER_GRID_CELL = 20
+        N_REALIZATIONS_PER_GRID_CELL = 10   # same role as N_REALIZATIONS_PER_SETTING
 
-        def n_realizations_for(v2):
-            # more realizations inside the noisy threshold zone, fewer
-            # outside it where the plateau is already well-behaved
-            return 40 if 1 <= v2 <= 5 else 15
- 
+        # one flat PARAM_SWEEP-style list: every combination of the two parameters
+        GRID_SWEEP = [
+            {"name": f"{GRID_PARAM_1}={v1:g}, {GRID_PARAM_2}={v2:g}",
+             GRID_PARAM_1: v1, GRID_PARAM_2: v2}
+            for v1 in GRID_VALUES_1
+            for v2 in GRID_VALUES_2
+        ]
+        print(f"Two-parameter sweep: {len(GRID_SWEEP)} settings x "
+              f"{N_REALIZATIONS_PER_GRID_CELL} realizations = "
+              f"{len(GRID_SWEEP) * N_REALIZATIONS_PER_GRID_CELL} runs")
+
         grid_results = {}
-        for v1 in GRID_VALUES_1:
-            for v2 in GRID_VALUES_2:
-                n = n_realizations_for(v2)
-                runs = []
-                for i in range(n):
-                    res = run_realization(
-                        seed=i, run_duration=SWEEP_RUN_DURATION,
-                        save_plots=False, verbose=False, return_grid=False,
-                        rainfall_source=SWEEP_RAINFALL_SOURCE,
-                        **{GRID_PARAM_1: v1, GRID_PARAM_2: v2},
-                    )
-                    runs.append(res)
-                grid_results[(v1, v2)] = runs
- 
-        # positivity check -- log scale needs strictly positive values
-        all_grid_y = np.concatenate([
-            np.array([r["total_road_mass"].sum() for r in grid_results[(v1, v2)]])
-            for v1 in GRID_VALUES_1 for v2 in GRID_VALUES_2
-        ])
+        for params in GRID_SWEEP:
+            name = params["name"]
+            kwargs = {k: v for k, v in params.items() if k != "name"}
+            print(f"\n=== Parameter setting: {name} ===")
+
+            runs = []
+            for i in range(N_REALIZATIONS_PER_GRID_CELL):
+                # same seed pool (0..N-1) reused for every setting
+                res = run_realization(
+                    seed=i, run_duration=SWEEP_RUN_DURATION,
+                    save_plots=False, verbose=False, return_grid=False,
+                    rainfall_source=SWEEP_RAINFALL_SOURCE, **kwargs,
+                )
+                runs.append(res)
+            grid_results[(params[GRID_PARAM_1], params[GRID_PARAM_2])] = runs
+
+        # total road mass per realization, for every (v1, v2) setting
+        grid_mass = {
+            key: np.array([r["total_road_mass"].sum() for r in runs])
+            for key, runs in grid_results.items()
+        }
+
+        # ---- log-log plot: one line per GRID_PARAM_1 value, with power-law fits ----
+        all_grid_y = np.concatenate(list(grid_mass.values()))
+        threshold_estimates = {}
         if all(v2 > 0 for v2 in GRID_VALUES_2) and all(all_grid_y > 0):
             fig, ax = plt.subplots(figsize=(9, 6))
             cmap = plt.get_cmap("viridis")
-            threshold_estimates = {}
             for i1, v1 in enumerate(GRID_VALUES_1):
-                means, sems = [], []
-                for v2 in GRID_VALUES_2:
-                    arr = np.array([r["total_road_mass"].sum() for r in grid_results[(v1, v2)]])
-                    means.append(arr.mean())
-                    sems.append(arr.std(ddof=1) / np.sqrt(len(arr)))  # standard error of the mean
-                means = np.array(means)
+                arrs = [grid_mass[(v1, v2)] for v2 in GRID_VALUES_2]
+                means = np.array([a.mean() for a in arrs])
+                sems = np.array([a.std(ddof=1) / np.sqrt(len(a)) for a in arrs])
                 color = cmap(i1 / max(len(GRID_VALUES_1) - 1, 1))
                 ax.errorbar(GRID_VALUES_2, means, yerr=sems, marker="o", color=color,
                             capsize=3, elinewidth=1, linestyle="none")
- 
-                # per-line power-law fit: mass = a * truck_num_ini^b
+
+                # per-line power-law fit: mass = a * GRID_PARAM_2^b
                 log_x = np.log10(GRID_VALUES_2)
                 log_y = np.log10(means)
                 b_fit, log_a_fit = np.polyfit(log_x, log_y, 1)
@@ -555,11 +610,7 @@ if __name__ == "__main__":
                 x_line = np.array([min(GRID_VALUES_2), max(GRID_VALUES_2)])
                 ax.plot(x_line, a_fit * x_line ** b_fit, color=color, linestyle="--",
                         label=f"{GRID_PARAM_1}={v1:.1e} (b={b_fit:.3g}, R²={r_sq:.3f})")
- 
-                diffs = np.diff(means)
-                jump_idx = np.argmax(diffs)
-                threshold_estimates[v1] = (GRID_VALUES_2[jump_idx] + GRID_VALUES_2[jump_idx + 1]) / 2
- 
+
             ax.set_xscale("log")
             ax.set_yscale("log")
             ax.set_xlabel(f"{GRID_PARAM_2} (log scale)")
@@ -571,15 +622,15 @@ if __name__ == "__main__":
         else:
             print(f"\nSkipped log-log grid plot: {GRID_PARAM_2} or total road mass includes "
                   f"zero/negative values, which can't be shown on a log scale.")
-            threshold_estimates = {}
-            for i1, v1 in enumerate(GRID_VALUES_1):
-                means = [np.mean([r["total_road_mass"].sum() for r in grid_results[(v1, v2)]]) for v2 in GRID_VALUES_2]
-                diffs = np.diff(means)
-                jump_idx = np.argmax(diffs)
-                threshold_estimates[v1] = (GRID_VALUES_2[jump_idx] + GRID_VALUES_2[jump_idx + 1]) / 2
- 
+
+        # ---- estimated threshold (biggest jump between neighboring GRID_PARAM_2 values) ----
+        for v1 in GRID_VALUES_1:
+            means = [grid_mass[(v1, v2)].mean() for v2 in GRID_VALUES_2]
+            jump_idx = np.argmax(np.diff(means))
+            threshold_estimates[v1] = (GRID_VALUES_2[jump_idx] + GRID_VALUES_2[jump_idx + 1]) / 2
+
         print(f"\n--- Estimated {GRID_PARAM_2} threshold, by {GRID_PARAM_1} ---")
-        print(f"{'compression':>14}{'estimated threshold':>22}")
+        print(f"{GRID_PARAM_1:>14}{'estimated threshold':>22}")
         for v1, thresh in threshold_estimates.items():
             print(f"{v1:>14.1e}{thresh:>22.2f}")
  
@@ -590,10 +641,11 @@ if __name__ == "__main__":
 # return_grid=True so the grid is available to plot from.
 #
 # From the main ensemble (baseline parameters, whatever PARAM_OVERRIDES was):
-seed_to_view = 42
-detailed = run_realization(seed=seed_to_view, run_duration=RUN_DURATION,
+seed_to_view = 5
+PARAM_OVERRIDES = {"scat_loss": 8e-5, "u_ps": 2e-1, "compression": 7e-3, "S": 0.10}
+detailed = run_realization(seed=seed_to_view, run_duration=SWEEP_RUN_DURATION,
                             save_plots=False, verbose=True, return_grid=True,
-                            rainfall_source="poisson", **PARAM_OVERRIDES)
+                            rainfall_source="historical", **PARAM_OVERRIDES)
 plot_cross_section(detailed)
 #%%
 # From a specific sweep setting -- pass the SAME parameter value(s) that
@@ -601,7 +653,7 @@ plot_cross_section(detailed)
 # seed_to_view = 5
 detailed = run_realization(seed=seed_to_view, run_duration=SWEEP_RUN_DURATION,
                              save_plots=False, verbose=True, return_grid=True,
-                             rainfall_source=SWEEP_RAINFALL_SOURCE, porosity_c=0.6)
+                             rainfall_source=SWEEP_RAINFALL_SOURCE, **PARAM_OVERRIDES)
 plot_cross_section(detailed)
 
 #%%
@@ -626,3 +678,5 @@ display(Image(filename=os.path.join(PROJECT_ROOT, "output/plots.gif")))
 display(Image(filename=os.path.join(PROJECT_ROOT, "output/subplots.gif")))
 display(Image(filename=os.path.join(PROJECT_ROOT, "output/subplots_h.gif")))
 display(Image(filename=os.path.join(PROJECT_ROOT, "output/subplots_f.gif")))
+
+# %%

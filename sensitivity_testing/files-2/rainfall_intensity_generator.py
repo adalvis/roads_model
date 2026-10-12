@@ -109,11 +109,15 @@ def solve_intensity_from_depth(total_depth_mm, num_storms, storm_duration_hours)
     solve for the constant intensity each storm needs to hold."""
     return total_depth_mm / (num_storms * storm_duration_hours)
 
-# Low case
-intensity_low = solve_intensity_from_depth(350, num_storms=10, storm_duration_hours=8)
-# High case
-intensity_high = solve_intensity_from_depth(947.45, num_storms=10, storm_duration_hours=8)
+intensity_low = solve_intensity_from_depth(200, num_storms=10, storm_duration_hours=8)
+intensity_low2 = solve_intensity_from_depth(300, num_storms=10, storm_duration_hours=8)
+intensity_med = solve_intensity_from_depth(500, num_storms=10, storm_duration_hours=8)
+intensity_med2 = solve_intensity_from_depth(700, num_storms=10, storm_duration_hours=8)
+intensity_high = solve_intensity_from_depth(1000, num_storms=10, storm_duration_hours=8)
 
 print(f"Low case intensity: {intensity_low:.2f} mm/hr")
+print(f"Low case 2 intensity: {intensity_low2:.2f} mm/hr")
+print(f"Medium case intensity: {intensity_med:.2f} mm/hr")
+print(f"Medium case 2 intensity: {intensity_med2:.2f} mm/hr")
 print(f"High case intensity: {intensity_high:.2f} mm/hr")
 # %%

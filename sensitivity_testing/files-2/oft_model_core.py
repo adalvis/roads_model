@@ -86,11 +86,11 @@ d95 = 0.019
 
 # ------ grid geometry ------
 cell_spacing = 0.1475  # cell width/length, m
-cell_area = cell_spacing ** 2
+cell_area = cell_spacing**2
 nrows = 540  # NO DITCH
-ncols = 64
-center = 32
-half_width = 7
+ncols = 65
+center = int(np.ceil(ncols/2-1))
+half_width = 6
 full_tire = False
 
 #%%
@@ -147,7 +147,7 @@ def create_array_poisson(size, zero_prob, lam, rng):
 # ==========================================================================
 def run_realization(seed, run_duration=run_duration_default,
                      save_plots=False, verbose=True, return_grid=False,
-                     rainfall_source="historical", rain_seed=None, grid_seed=None,
+                     rainfall_source="poisson", rain_seed=None, grid_seed=None,
                      porosity_c=porosity_c, porosity_f=porosity_f,
                      truck_num_ini=truck_num_ini, S=S, u_ps=2.18e-4, u_pb=2.3e-6,
                      F_af0=0.50, F_sf0=1, F_bc0=0.5, scat_loss=8e-4, compression=7e-4,
@@ -336,8 +336,8 @@ def run_realization(seed, run_duration=run_duration_default,
     ball_depth *= Sb_ini
 
     # ------ location indices ------
-    ruts = [mg.nodes[1:-1, 26 - 8:40 - 8], mg.nodes[1:-1, 41 - 8:55 - 8]]
-    half_road = mg.nodes[1:-1, 1:33]
+    ruts = [mg.nodes[1:-1, center-half_width-3:center-4], mg.nodes[1:-1, center+5:center+half_width+4]]
+    half_road = mg.nodes[1:-1, 1:center]
     full_road = mg.core_nodes
 
     if save_plots:
@@ -443,6 +443,21 @@ def run_realization(seed, run_duration=run_duration_default,
     active_init = mg.at_node['active__depth'][full_road].copy()
     surfacing_init = mg.at_node['surfacing__depth'][full_road].copy()
     ballast_init = mg.at_node['ballast__depth'][full_road].copy()
+
+        # ------ ruts-only layer states (mean per rut node) ------
+    rut_fields = {
+        "Maf_ruts": "active__mass_fines",
+        "Mac_ruts": "active__mass_coarse",
+        "Msf_ruts": "surfacing__mass_fines",
+        "Msc_ruts": "surfacing__mass_coarse",
+        "Mbf_ruts": "ballast__mass_fines",
+        "Mbc_ruts": "ballast__mass_coarse",
+    }
+    rut_series = {k: np.zeros(run_duration) for k in rut_fields}
+    rut_ini = {k: np.nanmean(mg.at_node[f][ruts]) for k, f in rut_fields.items()}
+    faf_ratio_ruts = np.zeros(run_duration)   # Saf:Sac, same quantity as the fine_frac map
+    faf_ratio_ruts_ini = np.nanmean(mg.at_node['active__depth_fines'][ruts]
+                                    / mg.at_node['active__depth_coarse'][ruts])
 
     if save_plots:
         out_dir = os.path.join(PROJECT_ROOT, 'output/')
@@ -715,6 +730,12 @@ def run_realization(seed, run_duration=run_duration_default,
             Mbf[i] = np.sum(mg.at_node['ballast__mass_fines'])
             Mbc[i] = np.sum(mg.at_node['ballast__mass_coarse'])
 
+        # ruts-only layer states, recorded every day (rain or no rain)
+        for k, f in rut_fields.items():
+            rut_series[k][i] = np.nanmean(mg.at_node[f][ruts])
+        faf_ratio_ruts[i] = np.nanmean(mg.at_node['active__depth_fines'][ruts]
+                                       / mg.at_node['active__depth_coarse'][ruts])
+
     wall_time = time.time() - start
     if verbose:
         print("Wall time for run:", wall_time, "s")
@@ -805,6 +826,10 @@ def run_realization(seed, run_duration=run_duration_default,
         "phi_f_a_ruts_min": phi_f_a_ruts_min,
         "phi_c_s_ruts_min": phi_c_s_ruts_min,
         "phi_f_s_ruts_min": phi_f_s_ruts_min,
+        **rut_series,
+        "rut_ini": rut_ini,
+        "faf_ratio_ruts": faf_ratio_ruts,
+        "faf_ratio_ruts_ini": faf_ratio_ruts_ini,
     }
 
     if return_grid:
@@ -1007,5 +1032,7 @@ def safe_hist(ax, arr, bins, color, label, xlabel="kg"):
     ax.set_xlabel(xlabel)
 
 
+
+# %%
 
 # %%
