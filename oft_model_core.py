@@ -93,7 +93,7 @@ cell_area = cell_spacing**2
 nrows = 540 # number of rows in the grid
 ncols = 65  # number of columns in the grid (NO DITCH)
 center = int(np.ceil(ncols/2-1))
-half_width = 6 
+half_width = 7 
 full_tire = False
 
 #%%
@@ -331,7 +331,8 @@ def run_realization(seed, run_duration=run_duration_default,
 
     eg = Erodible_Grid(
         nrows=nrows, ncols=ncols, spacing=cell_spacing,
-        full_tire=full_tire, long_slope=S, road_peak=center, ditch=False,
+        full_tire=full_tire, long_slope=S, road_peak=center, 
+        ditch=False, lat_slope=0.06,
     )
     mg, z, road_flag, n = eg()
 
@@ -455,6 +456,21 @@ def run_realization(seed, run_duration=run_duration_default,
     active_init = mg.at_node['active__depth'][full_road].copy()
     surfacing_init = mg.at_node['surfacing__depth'][full_road].copy()
     ballast_init = mg.at_node['ballast__depth'][full_road].copy()
+    
+    # ------ ruts-only layer states (mean per rut node) ------
+    rut_fields = {
+        "Maf_ruts": "active__mass_fines",
+        "Mac_ruts": "active__mass_coarse",
+        "Msf_ruts": "surfacing__mass_fines",
+        "Msc_ruts": "surfacing__mass_coarse",
+        "Mbf_ruts": "ballast__mass_fines",
+        "Mbc_ruts": "ballast__mass_coarse",
+    }
+    rut_series = {k: np.zeros(run_duration) for k in rut_fields}
+    rut_ini = {k: np.nanmean(mg.at_node[f][ruts]) for k, f in rut_fields.items()}
+    faf_ratio_ruts = np.zeros(run_duration)   # Saf:Sac, same quantity as the fine_frac map
+    faf_ratio_ruts_ini = np.nanmean(mg.at_node['active__depth_fines'][ruts]
+                                    / mg.at_node['active__depth_coarse'][ruts])
 
     if save_plots:
         out_dir = os.path.join(PROJECT_ROOT, 'output/')
@@ -592,10 +608,10 @@ def run_realization(seed, run_duration=run_duration_default,
                 plt.ylabel('Road length (m)')
 
                 plt.subplot(132)
-                imshow_grid(mg, 'surface_water__discharge', var_name='Discharge',
-                            plot_name='Discharge, t = %i days' % i,
-                            var_units='$m/s^3$', grid_units=('m', 'm'),
-                            cmap='Blues', vmin=0, vmax=0.00001, shrink=0.9)
+                imshow_grid(mg, 'drainage_area', var_name='Drainage area',
+                            plot_name='Drainage area, t = %i days' % i,
+                            var_units='# of nodes', grid_units=('m', 'm'),
+                            cmap='viridis', vmin=0, vmax=8, shrink=0.9)
                 plt.xlabel('Road width (m)')
                 plt.ylabel('Road length (m)')
 
@@ -680,33 +696,33 @@ def run_realization(seed, run_duration=run_duration_default,
 
                 fig = plt.figure(figsize=(4, 7))
                 plt.subplot(321)
-                imshow_grid(mg, 'surface_water__discharge', cmap='Blues', plot_name="Upper Left",
-                            vmin=0, vmax=1e-5, grid_units=('m', 'm'), allow_colorbar=False)
+                imshow_grid(mg, 'drainage_area', cmap='viridis', plot_name="Upper Left",
+                            vmin=0, vmax=8, grid_units=('m', 'm'), allow_colorbar=False)
                 plt.xlim(0, 4.72); plt.ylim(73.75, 79.65)
                 plt.subplot(323)
-                imshow_grid(mg, 'surface_water__discharge', cmap='Blues', plot_name="Middle Left",
-                            vmin=0, vmax=1e-5, grid_units=('m', 'm'), allow_colorbar=False)
+                imshow_grid(mg, 'drainage_area', cmap='viridis', plot_name="Middle Left",
+                            vmin=0, vmax=8, grid_units=('m', 'm'), allow_colorbar=False)
                 plt.xlim(0, 4.72); plt.ylim(33.925, 39.825)
                 plt.subplot(325)
-                imshow_grid(mg, 'surface_water__discharge', cmap='Blues', plot_name="Lower Left",
-                            vmin=0, vmax=1e-5, grid_units=('m', 'm'), allow_colorbar=False)
+                imshow_grid(mg, 'drainage_area', cmap='viridis', plot_name="Lower Left",
+                            vmin=0, vmax=8, grid_units=('m', 'm'), allow_colorbar=False)
                 plt.xlim(0, 4.72); plt.ylim(0, 5.9)
                 plt.subplot(322)
-                imshow_grid(mg, 'surface_water__discharge', cmap='Blues', plot_name="Upper Right",
-                            vmin=0, vmax=1e-5, grid_units=('m', 'm'), allow_colorbar=False)
+                imshow_grid(mg, 'drainage_area', cmap='viridis', plot_name="Upper Right",
+                            vmin=0, vmax=8, grid_units=('m', 'm'), allow_colorbar=False)
                 plt.xlim(4.72, 9.44); plt.ylim(73.75, 79.65)
                 plt.subplot(324)
-                imshow_grid(mg, 'surface_water__discharge', cmap='Blues', plot_name="Middle Right",
-                            vmin=0, vmax=1e-5, grid_units=('m', 'm'), allow_colorbar=False)
+                imshow_grid(mg, 'drainage_area', cmap='viridis', plot_name="Middle Right",
+                            vmin=0, vmax=8, grid_units=('m', 'm'), allow_colorbar=False)
                 plt.xlim(4.72, 9.44); plt.ylim(33.925, 39.825)
                 plt.subplot(326)
-                imshow_grid(mg, 'surface_water__discharge', cmap='Blues', plot_name="Lower Right",
-                            vmin=0, vmax=1e-5, grid_units=('m', 'm'), allow_colorbar=False)
+                imshow_grid(mg, 'drainage_area', cmap='viridis', plot_name="Lower Right",
+                            vmin=0, vmax=8, grid_units=('m', 'm'), allow_colorbar=False)
                 plt.xlim(4.72, 9.44); plt.ylim(0, 5.9)
-                fig.suptitle('Surface Water Discharge,\nt = %i days' % i)
+                fig.suptitle('Drainage Area,\nt = %i days' % i)
                 plt.tight_layout()
                 cax = plt.axes((1, 0.075, 0.075, 0.8))
-                plt.colorbar(cax=cax, extend="max", label="Discharge ($m^3/s$)")
+                plt.colorbar(cax=cax, extend="max", label="Drainage Area (# of nodes)")
                 plt.savefig(os.path.join(PROJECT_ROOT, 'output/hubplots_%i_days.png' % i), bbox_inches='tight')
                 # plt.show()
                 plt.close()
@@ -729,6 +745,13 @@ def run_realization(seed, run_duration=run_duration_default,
             Mb[i] = np.sum(mg.at_node['ballast__mass'])
             Mbf[i] = np.sum(mg.at_node['ballast__mass_fines'])
             Mbc[i] = np.sum(mg.at_node['ballast__mass_coarse'])
+        
+        # ruts-only layer states, recorded every day (rain or no rain)
+        for k, f in rut_fields.items():
+            rut_series[k][i] = np.nanmean(mg.at_node[f][ruts])
+        faf_ratio_ruts[i] = np.nanmean(mg.at_node['active__depth_fines'][ruts]
+                                    / mg.at_node['active__depth_coarse'][ruts])
+
 
     wall_time = time.time() - start
     if verbose:
@@ -821,6 +844,10 @@ def run_realization(seed, run_duration=run_duration_default,
         "phi_f_a_ruts_min": phi_f_a_ruts_min,
         "phi_c_s_ruts_min": phi_c_s_ruts_min,
         "phi_f_s_ruts_min": phi_f_s_ruts_min,
+        **rut_series,
+        "rut_ini": rut_ini,
+        "faf_ratio_ruts": faf_ratio_ruts,
+        "faf_ratio_ruts_ini": faf_ratio_ruts_ini,
     }
 
     if return_grid:
