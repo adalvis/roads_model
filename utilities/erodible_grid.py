@@ -14,7 +14,8 @@ class Erodible_Grid(Component):
             full_tire,
             long_slope,
             road_peak,
-            ditch=True
+            ditch=False,
+            lat_slope=0.03
     ):
         """Initialize Erodible Grid Component"""
         super().__init__(None)
@@ -30,8 +31,6 @@ class Erodible_Grid(Component):
 
         if full_tire == False: #When node spacing is half-tire-width
             road_peak = road_peak #peak crowning height occurs at this x-location
-            up = 0.0067 #rise of slope from ditchline to crown
-            down = 0.0067 #rise of slope from crown to fillslope
             
             for g in range(nrows): #loop through road length
                 elev = 0 #initialize elevation placeholder
@@ -55,10 +54,10 @@ class Erodible_Grid(Component):
                             elev = -0.25
                             flag = False
                         elif h <= road_peak and h > 8: #update latitudinal slopes based on location related to road_peak
-                            elev += up
+                            elev += lat_slope*spacing
                             flag = True
                         else:
-                            elev -= down
+                            elev -= lat_slope*spacing
                             flag = True
                         z[g*ncols + h] = elev #update elevation based on x & y locations
                         road_flag[g*ncols+h] = flag #update road_flag based on x & y locations
@@ -68,18 +67,16 @@ class Erodible_Grid(Component):
                             elev = 0
                             flag = True
                         elif h <= road_peak:
-                            elev += up
+                            elev += lat_slope*spacing
                             flag = True
                         else:
-                            elev -= down
+                            elev -= lat_slope*spacing
                             flag = True
 
                         z[g*ncols + h] = elev #update elevation based on x & y locations
                         road_flag[g*ncols+h] = flag #update road_flag based on x & y locations
         elif full_tire == True: #When node spacing is full-tire-width
             road_peak = road_peak #peak crowning height occurs at this x-location
-            up = 0.0134 #rise of slope from ditchline to crown
-            down = 0.0134 #rise of slope from crown to fillslope
             
             for g in range(nrows): #loop through road length
                 elev = 0 #initialize elevation placeholder
@@ -97,20 +94,20 @@ class Erodible_Grid(Component):
                             elev = -0.25
                             flag = False
                         elif h <= road_peak and h > 4: #update latitudinal slopes based on location related to road_peak
-                            elev += up
+                            elev += lat_slope*spacing
                             flag = True
                         else:
-                            elev -= down
+                            elev -= lat_slope*spacing
                             flag = True
                         z[g*ncols + h] = elev #update elevation based on x & y locations
                         road_flag[g*ncols+h] = flag #update road_flag based on x & y locations
                 else:
                     for h in range(ncols): #loop through road width
                         if h <= road_peak:
-                            elev += up
+                            elev += lat_slope*spacing
                             flag = True
                         else:
-                            elev -= down
+                            elev -= lat_slope*spacing
                             flag = True
                         z[g*ncols + h] = elev #update elevation based on x & y locations
                         road_flag[g*ncols+h] = flag #update road_flag based on x & y locations
