@@ -90,7 +90,7 @@ cell_area = cell_spacing**2
 nrows = 540  # NO DITCH
 ncols = 65
 center = int(np.ceil(ncols/2-1))
-half_width = 6
+half_width = 7
 full_tire = False
 
 #%%
@@ -319,7 +319,8 @@ def run_realization(seed, run_duration=run_duration_default,
 
     eg = Erodible_Grid(
         nrows=nrows, ncols=ncols, spacing=cell_spacing,
-        full_tire=full_tire, long_slope=S, road_peak=center, ditch=False,
+        full_tire=full_tire, long_slope=S, road_peak=center,
+        ditch=False, lat_slope=0.06,
     )
     mg, z, road_flag, n = eg()
 
@@ -595,10 +596,10 @@ def run_realization(seed, run_duration=run_duration_default,
                 plt.ylabel('Road length (m)')
 
                 plt.subplot(132)
-                imshow_grid(mg, 'surface_water__discharge', var_name='Discharge',
-                            plot_name='Discharge, t = %i days' % i,
-                            var_units='$m/s^3$', grid_units=('m', 'm'),
-                            cmap='Blues', vmin=0, vmax=0.00001, shrink=0.9)
+                imshow_grid(mg, 'drainage_area', var_name='Drainage area',
+                            plot_name='Drainage area, t = %i days' % i,
+                            var_units='# of nodes', grid_units=('m', 'm'),
+                            cmap='viridis', vmin=0, vmax=8, shrink=0.9)
                 plt.xlabel('Road width (m)')
                 plt.ylabel('Road length (m)')
 
@@ -681,33 +682,33 @@ def run_realization(seed, run_duration=run_duration_default,
 
                 fig = plt.figure(figsize=(4, 7))
                 plt.subplot(321)
-                imshow_grid(mg, 'surface_water__discharge', cmap='Blues', plot_name="Upper Left",
-                            vmin=0, vmax=1e-5, grid_units=('m', 'm'), allow_colorbar=False)
+                imshow_grid(mg, 'drainage_area', cmap='viridis', plot_name="Upper Left",
+                            vmin=0, vmax=8, grid_units=('m', 'm'), allow_colorbar=False)
                 plt.xlim(0, 4.72); plt.ylim(73.75, 79.65)
                 plt.subplot(323)
-                imshow_grid(mg, 'surface_water__discharge', cmap='Blues', plot_name="Middle Left",
-                            vmin=0, vmax=1e-5, grid_units=('m', 'm'), allow_colorbar=False)
+                imshow_grid(mg, 'drainage_area', cmap='viridis', plot_name="Middle Left",
+                            vmin=0, vmax=8, grid_units=('m', 'm'), allow_colorbar=False)
                 plt.xlim(0, 4.72); plt.ylim(33.925, 39.825)
                 plt.subplot(325)
-                imshow_grid(mg, 'surface_water__discharge', cmap='Blues', plot_name="Lower Left",
-                            vmin=0, vmax=1e-5, grid_units=('m', 'm'), allow_colorbar=False)
+                imshow_grid(mg, 'drainage_area', cmap='viridis', plot_name="Lower Left",
+                            vmin=0, vmax=8, grid_units=('m', 'm'), allow_colorbar=False)
                 plt.xlim(0, 4.72); plt.ylim(0, 5.9)
                 plt.subplot(322)
-                imshow_grid(mg, 'surface_water__discharge', cmap='Blues', plot_name="Upper Right",
-                            vmin=0, vmax=1e-5, grid_units=('m', 'm'), allow_colorbar=False)
+                imshow_grid(mg, 'drainage_area', cmap='viridis', plot_name="Upper Right",
+                            vmin=0, vmax=8, grid_units=('m', 'm'), allow_colorbar=False)
                 plt.xlim(4.72, 9.44); plt.ylim(73.75, 79.65)
                 plt.subplot(324)
-                imshow_grid(mg, 'surface_water__discharge', cmap='Blues', plot_name="Middle Right",
-                            vmin=0, vmax=1e-5, grid_units=('m', 'm'), allow_colorbar=False)
+                imshow_grid(mg, 'drainage_area', cmap='viridis', plot_name="Middle Right",
+                            vmin=0, vmax=8, grid_units=('m', 'm'), allow_colorbar=False)
                 plt.xlim(4.72, 9.44); plt.ylim(33.925, 39.825)
                 plt.subplot(326)
-                imshow_grid(mg, 'surface_water__discharge', cmap='Blues', plot_name="Lower Right",
-                            vmin=0, vmax=1e-5, grid_units=('m', 'm'), allow_colorbar=False)
+                imshow_grid(mg, 'drainage_area', cmap='viridis', plot_name="Lower Right",
+                            vmin=0, vmax=8, grid_units=('m', 'm'), allow_colorbar=False)
                 plt.xlim(4.72, 9.44); plt.ylim(0, 5.9)
-                fig.suptitle('Surface Water Discharge,\nt = %i days' % i)
+                fig.suptitle('Drainage Area,\nt = %i days' % i)
                 plt.tight_layout()
                 cax = plt.axes((1, 0.075, 0.075, 0.8))
-                plt.colorbar(cax=cax, extend="max", label="Discharge ($m^3/s$)")
+                plt.colorbar(cax=cax, extend="max", label="Drainage area (# of nodes)")
                 plt.savefig(os.path.join(PROJECT_ROOT, 'output/hubplots_%i_days.png' % i), bbox_inches='tight')
                 plt.show()
 
