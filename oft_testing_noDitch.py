@@ -135,13 +135,15 @@ center = int(np.ceil(ncols/2-1))
 half_width = 7 
 full_tire = False
 
-eg = Erodible_Grid(nrows=nrows, ncols=ncols,\
-    spacing=cell_spacing, full_tire=full_tire, \
-    long_slope=S, road_peak=center, ditch=False)
+eg = Erodible_Grid(
+    nrows=nrows, ncols=ncols, spacing=cell_spacing, 
+    full_tire=full_tire, long_slope=S, road_peak=center, 
+    ditch=False, lat_slope=0.06
+    )
 
 mg, z, road_flag, n = eg() 
 
-noise_amplitude=0.01
+noise_amplitude=0.005
 road = road_flag==1
 
 random=np.random.rand(
@@ -533,10 +535,10 @@ for i in range(0, run_duration): # daily time step
         plt.ylabel('Road length (m)')
 
         plt.subplot(132)
-        im = imshow_grid(mg,'surface_water__discharge', var_name='Discharge', 
-                        plot_name='Discharge, t = %i days' %i,
-                        var_units='$m/s^3$', grid_units=('m','m'), 
-                        cmap='Blues', vmin=0, vmax=0.00001, shrink=0.9)
+        im = imshow_grid(mg,'drainage_area', var_name='Drainage Area', 
+                        plot_name='Drainage Area, t = %i days' %i,
+                        var_units='# of nodes', grid_units=('m','m'), 
+                        cmap='viridis', vmin=0, vmax=8, shrink=0.9)
         plt.xlabel('Road width (m)')
         plt.ylabel('Road length (m)')
 
@@ -652,46 +654,46 @@ for i in range(0, run_duration): # daily time step
         #==================================
         fig = plt.figure(figsize=(4,7))
         plt.subplot(321,)
-        im1 = imshow_grid(mg,'surface_water__discharge', cmap='Blues', plot_name="Upper Left",
-            vmin=0, vmax=1e-5, grid_units=('m','m'), allow_colorbar=False)
+        im1 = imshow_grid(mg,'drainage_area', cmap='viridis', plot_name="Upper Left",
+            vmin=0, vmax=8,grid_units=('m','m'), allow_colorbar=False)
         plt.xlim(0,4.72)
         plt.ylim(73.75,79.65)
 
         plt.subplot(323,)
-        im2 = imshow_grid(mg,'surface_water__discharge', cmap='Blues', plot_name="Middle Left",
-            vmin=0, vmax=1e-5, grid_units=('m','m'), allow_colorbar=False)
+        im2 = imshow_grid(mg,'drainage_area', cmap='viridis', plot_name="Middle Left",
+            vmin=0, vmax=8, grid_units=('m','m'), allow_colorbar=False)
         plt.xlim(0,4.72)
         plt.ylim(33.925,39.825)
 
         plt.subplot(325)
-        im3 = imshow_grid(mg,'surface_water__discharge', cmap='Blues', plot_name="Lower Left",
-            vmin=0, vmax=1e-5, grid_units=('m','m'), allow_colorbar=False)
+        im3 = imshow_grid(mg,'drainage_area', cmap='viridis', plot_name="Lower Left",
+            vmin=0, vmax=8, grid_units=('m','m'), allow_colorbar=False)
         plt.xlim(0,4.72)
         plt.ylim(0,5.9)
 
         plt.subplot(322)
-        im4 = imshow_grid(mg,'surface_water__discharge', cmap='Blues', plot_name="Upper Right",
-            vmin=0, vmax=1e-5, grid_units=('m','m'), allow_colorbar=False)
+        im4 = imshow_grid(mg,'drainage_area', cmap='viridis', plot_name="Upper Right",
+            vmin=0, vmax=8, grid_units=('m','m'), allow_colorbar=False)
         plt.xlim(4.72,9.44)
         plt.ylim(73.75,79.65)
 
         plt.subplot(324)
-        im5 = imshow_grid(mg,'surface_water__discharge', cmap='Blues', plot_name="Middle Right",
-            vmin=0, vmax=1e-5, grid_units=('m','m'), allow_colorbar=False)
+        im5 = imshow_grid(mg,'drainage_area', cmap='viridis', plot_name="Middle Right",
+            vmin=0, vmax=8, grid_units=('m','m'), allow_colorbar=False)
         plt.xlim(4.72,9.44)
         plt.ylim(33.925,39.825)
 
         plt.subplot(326)
-        im6 = imshow_grid(mg,'surface_water__discharge', cmap='Blues', plot_name="Lower Right",
-            vmin=0, vmax=1e-5, grid_units=('m','m'), allow_colorbar=False)
+        im6 = imshow_grid(mg,'drainage_area', cmap='viridis', plot_name="Lower Right",
+            vmin=0, vmax=8, grid_units=('m','m'), allow_colorbar=False)
         plt.xlim(4.72,9.44)
         plt.ylim(0,5.9)
 
-        fig.suptitle('Surface Water Discharge,\nt = %i days' %i)
+        fig.suptitle('Drainage Area,\nt = %i days' %i)
         plt.tight_layout()
         cax = plt.axes((1, 0.075, 0.075, 0.8))
-        plt.colorbar(cax=cax, extend="max", label="Discharge ($m^3/s$)")
-        plt.savefig('output/hubplots_%i_days.png' %i, bbox_inches='tight') #zoomed in subplots for discharge
+        plt.colorbar(cax=cax, extend="max", label="Drainage Area (# of nodes)")
+        plt.savefig('output/hubplots_%i_days.png' %i, bbox_inches='tight') #zoomed in subplots for drainage area
         plt.close()
 
         #Append manning's n vectors
