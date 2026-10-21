@@ -129,6 +129,7 @@ cell_spacing = 0.1475 # cell width or length dimension in meters
 cell_area = cell_spacing**2
 nrows = 540 # number of rows in the grid
 ncols = 65  # number of columns in the grid (NO DITCH)
+row = 15  # row to extract cross-section from
 
 #We're using half tire width for node spacing
 center = int(np.ceil(ncols/2-1))
@@ -160,7 +161,7 @@ ball_depth = mg.add_ones('ballast__depth', at='node')
 ball_depth *= Sb_ini
 
 # %% Pre-define location indices
-ruts = [mg.nodes[1:-1, 26-8:40-8], mg.nodes[1:-1, 41-8:55-8]] #[mg.nodes[1:-1, center-half_width-3:center-4], mg.nodes[1:-1, center+5:center+half_width+4]]
+ruts = [mg.nodes[1:-1, center-half_width-3:center-4], mg.nodes[1:-1, center+5:center+half_width+4]]#[mg.nodes[1:-1, 26-8:40-8], mg.nodes[1:-1, 41-8:55-8]] #
 half_road = mg.nodes[1:-1, 1:center]
 full_road = mg.core_nodes
 
@@ -178,7 +179,7 @@ X = mg.node_x.reshape(mg.shape)
 Y = mg.node_y.reshape(mg.shape)
 Z = z.reshape(mg.shape)
 
-xsec_pre = mg.at_node['topographic__elevation'][mg.nodes[100,:].flatten()].copy()
+xsec_pre = mg.at_node['topographic__elevation'][mg.nodes[row,:].flatten()].copy()
 #%% 
 # PREP OUTPUT ARRAYS/LISTS
 #==================================
@@ -269,7 +270,7 @@ tpe = TruckPassErosion(
                     half_width,
                     full_tire, 
                     truck_num=truck_num_ini,
-                    F_af0 = 0.50, 
+                    F_af0 = 0.5, 
                     F_sf0 = 1, 
                     F_bc0 = 0.5, 
                     scat_loss=8e-4, 
@@ -286,6 +287,7 @@ oft = OverlandFlowTransporter(
                             tau_c=tau_c_road, 
                             n_c=n_c, 
                             n_f=n_f,
+                            row=row,
                             flow_accumulator=fa,
                             depression_finder=df
                             )
@@ -462,7 +464,9 @@ for i in range(0, run_duration): # daily time step
         Mb[i] = np.sum(mg.at_node['ballast__mass'])
         Mbf[i] = np.sum(mg.at_node['ballast__mass_fines'])
         Mbc[i] = np.sum(mg.at_node['ballast__mass_coarse'])
-
+        
+        oft._Maf_plot.append(oft._Saf[oft.grid.nodes[oft._row, :]]/oft._Sac[oft.grid.nodes[oft._row, :]])#oft._Maf[oft.grid.nodes[oft._row,:]])
+        oft._t_plot.append(86400)
     #==================================
     # RAINFALL
     #==================================
@@ -522,31 +526,41 @@ for i in range(0, run_duration): # daily time step
         dz_cum = z-z_ini_cum # calculate cumulative elevation change
         dz_arr_cum.append(sum(dz_cum[full_road.flatten()])) 
 
+        oft._Maf_plot.append(oft._Saf[oft.grid.nodes[oft._row, :]]/oft._Sac[oft.grid.nodes[oft._row, :]])#oft._Maf[oft.grid.nodes[oft._row,:]])
+        oft._t_plot.append((1-dt_day)*86400)
+
         #==================================
         # FIGURES FOR GIF CREATION - 1ST GIF
         #==================================
-        fig = plt.figure(figsize=(9,6))
+        fig = plt.figure(figsize=(12,6))
         mg.add_field('fine_frac', mg.at_node['active__depth_fines']/mg.at_node['active__depth_coarse'], at='node', units='m-', clobber=True)
-        plt.subplot(131)
-        im = imshow_grid(mg,'fine_frac', var_name='Faf', var_units='-', 
+        plt.subplot(141)
+        im = imshow_grid(mg,'fine_frac', var_name='Fine fraction', var_units='-', 
                         plot_name='$S_{af}:S_{ac}$ in\nactive layer, t = %i days' %i,
                         grid_units=('m','m'), cmap='Dark2', vmin=0, vmax=1.6, shrink=0.9)
         plt.xlabel('Road width (m)')
         plt.ylabel('Road length (m)')
 
-        plt.subplot(132)
-        im = imshow_grid(mg,'drainage_area', var_name='Drainage Area', 
-                        plot_name='Drainage Area, t = %i days' %i,
+        plt.subplot(142)
+        im = imshow_grid(mg,'drainage_area', var_name='Drainage area', 
+                        plot_name='Drainage area, t = %i days' %i,
                         var_units='# of nodes', grid_units=('m','m'), 
                         cmap='viridis', vmin=0, vmax=8, shrink=0.9)
         plt.xlabel('Road width (m)')
         plt.ylabel('Road length (m)')
 
         mg.add_field('dz_cum', dz_cum, at='node', units='m', clobber=True)
-        plt.subplot(133)
+        plt.subplot(143)
         im = imshow_grid(mg,'dz_cum', var_name='Cumulative dz', var_units='m', 
                         plot_name='Elevation change, t = %i days' %i,
                         grid_units=('m','m'), cmap='RdBu', vmin=-0.0009, vmax=0.0009, shrink=0.9)
+        plt.xlabel('Road width (m)')
+        plt.ylabel('Road length (m)')
+
+        plt.subplot(144)
+        im = imshow_grid(mg,'surface_water__discharge', var_name='Surface water discharge', var_units='m^3/s', 
+                        plot_name='Surface water discharge,\nt = %i days' %i,
+                        grid_units=('m','m'), cmap='Blues', vmin=0, vmax=1e-5, shrink=0.9)
         plt.xlabel('Road width (m)')
         plt.ylabel('Road length (m)')
 
@@ -808,9 +822,9 @@ image_list_f[0].save(
 #%%
 # CROSS SECTION PLOT
 #==================================
-xsec_active = mg.at_node['topographic__elevation'][mg.nodes[100,:].flatten()]
-xsec_surf =  mg.at_node['surfacing__elevation'][mg.nodes[100,:].flatten()] 
-xsec_ball = mg.at_node['ballast__elevation'][mg.nodes[100,:].flatten()]
+xsec_active = mg.at_node['topographic__elevation'][mg.nodes[row,:].flatten()]
+xsec_surf =  mg.at_node['surfacing__elevation'][mg.nodes[row,:].flatten()] 
+xsec_ball = mg.at_node['ballast__elevation'][mg.nodes[row,:].flatten()]
 
 plt.figure(figsize=(8,3), layout='tight')
 plt.plot(X[36], xsec_pre, color='gray', linestyle='-.', label='Before')
@@ -820,6 +834,7 @@ plt.plot(X[36], xsec_ball, color ='cyan', linestyle='-', label = 'After - Ballas
 plt.xlim(0,9.5)
 plt.xlabel('Road width (m)')
 plt.ylabel('Elevation (m)')
+plt.title(r'Cross-section, row=%i' %row)
 plt.legend()
 plt.show()
 
@@ -1018,6 +1033,21 @@ ax[2].set_ylabel('Ballast Mass - coarse\naverage [$kg$]')
 ax[2].set_xlim(0,run_duration)
 plt.tight_layout()
 plt.show()
+#%% 
+# NODE TRACKING PLOT
+#==================================  
+t = np.array(oft._t_plot).cumsum()/86400
+Maf_atnode = np.array(oft._Maf_plot)
+
+cmap=plt.get_cmap('viridis')
+norm = plt.Normalize(21, 44)
+for x in range(21, 44):
+    plt.plot(t, Maf_atnode[:,x], label=x, color=cmap(norm(x)))
+    plt.xlabel("Duration of rainfall (days)")
+    plt.ylabel("$S_{af}:S_{ac}$ at given node")
+    plt.title(r'row=%i' %row)
+    plt.legend(ncols=3)
+plt.show()
 
 # %%
 # plt.bar(range(0,run_duration), np.multiply(road_shear_frac_arr, 100))
@@ -1041,4 +1071,12 @@ plt.show()
 # plt.ylabel('Average Shear Stress Partitioning \nCoefficient: $f_s$')
 # plt.xlim(0,run_duration)
 # plt.legend()
-plt.show()
+#%% 
+# DISPLAY GIFS
+#==================================  
+from IPython.display import Image, display
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))  # Get the directory of the current script
+display(Image(filename=os.path.join(PROJECT_ROOT, "plots.gif")))
+display(Image(filename=os.path.join(PROJECT_ROOT, "subplots.gif")))
+display(Image(filename=os.path.join(PROJECT_ROOT, "subplots_h.gif")))
+display(Image(filename=os.path.join(PROJECT_ROOT, "subplots_f.gif")))
