@@ -47,15 +47,16 @@ if __name__ == "__main__":
  
     if RUN_SINGLE_PARAM_SWEEP:
 
-        SWEEP_PARAM = "u_ps"  # the run_realization() keyword argument to vary
+        SWEEP_PARAM = "compression"  # the run_realization() keyword argument to vary
         #may or may not have to update code with type as int (truck_num for example)
         
-        SWEEP_VALUES = [2e-7, 7e-7, 2e-6, 7e-6, 2e-5, 7e-5, 2e-4, 7e-4]
+        SWEEP_VALUES = [7e-5,2e-4,7e-4,2e-3,7e-3]
+        # SWEEP_VALUES = [2e-7, 7e-7, 2e-6, 7e-6, 2e-5, 7e-5, 2e-4, 7e-4]
         #SWEEP_VALUES = [1e-4, 1e-3, 1e-2]  # the values to test it at
         #PARAM_OVERRIDES = {"F_af0": 0.85}
         #PARAM_OVERRIDES = {"F_af0": 0.25}
         #PARAM_OVERRIDES = {"u_ps": 0}
-        PARAM_OVERRIDES = {"scat_loss": 8e-4, "S": 0.05, "compression":7e-4}
+        PARAM_OVERRIDES = {"scat_loss": 8e-4, "S": 0.05, "u_ps":2.18e-4}
         #PARAM_OVERRIDES = {"scat_loss": 8e-5}
 
         PARAM_SWEEP = [
@@ -534,6 +535,47 @@ if __name__ == "__main__":
                 ax.legend(fontsize=8)
                 plt.tight_layout()
                 plt.show()
+
+            def scatter_vs_fs(get_x, xlabel, title, per_day=False):
+                vals = np.array(SWEEP_VALUES, dtype=float)
+                cmap = plt.get_cmap("viridis")
+                norm = plt.Normalize(vals.min(), vals.max())
+                fig, ax = plt.subplots(figsize=(7, 5))
+                xs_all, ys_all = [], []
+                for name, v in zip(sweep_labels, vals):
+                    for res in sweep_results[name]:
+                        x = np.asarray(get_x(res), dtype=float)
+                        y = np.asarray(res["fs_avg_ruts"], dtype=float)
+                        if not per_day:
+                            x, y = np.atleast_1d(x[-1]), np.atleast_1d(y[-1])
+                        ok = np.isfinite(x) & np.isfinite(y)
+                        ax.scatter(x[ok], y[ok], color=cmap(norm(v)),
+                                   alpha=0.5 if per_day else 0.7, s=8 if per_day else 25)
+                        xs_all.append(x[ok]); ys_all.append(y[ok])
+                xs_all, ys_all = np.concatenate(xs_all), np.concatenate(ys_all)
+                r = np.corrcoef(xs_all, ys_all)[0, 1] if xs_all.std() > 0 and ys_all.std() > 0 else np.nan
+                fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, label=SWEEP_PARAM)
+                ax.set_xlabel(xlabel)
+                ax.set_ylabel("Mean shear-stress partitioning fs, ruts only [-]")
+                ax.set_title(f"{title}  (r = {r:.2f}, n = {len(xs_all)})")
+                plt.tight_layout()
+                plt.show()
+
+            # end of run: one point per run
+            scatter_vs_fs(lambda res: res["Maf_ruts"],
+                          "Active-layer fines mass in ruts, Maf [kg/node]",
+                          "fs vs. Maf (end of run)")
+            scatter_vs_fs(lambda res: res["faf_ratio_ruts"],
+                          "Saf:Sac in ruts [-]",
+                          "fs vs. Saf:Sac (end of run)")
+
+            # every day of every run
+            scatter_vs_fs(lambda res: res["Maf_ruts"],
+                          "Active-layer fines mass in ruts, Maf [kg/node]",
+                          "fs vs. Maf (all days)", per_day=True)
+            scatter_vs_fs(lambda res: res["faf_ratio_ruts"],
+                          "Saf:Sac in ruts [-]",
+                          "fs vs. Saf:Sac (all days)", per_day=True)
 
         else:
             print("\nSkipped additional metric sweeps: this PARAM_SWEEP isn't a single "
