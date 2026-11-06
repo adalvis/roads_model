@@ -47,17 +47,18 @@ if __name__ == "__main__":
  
     if RUN_SINGLE_PARAM_SWEEP:
 
-        SWEEP_PARAM = "compression"  # the run_realization() keyword argument to vary
+        SWEEP_PARAM = "truck_num_ini"  # the run_realization() keyword argument to vary
         #may or may not have to update code with type as int (truck_num for example)
         
-        SWEEP_VALUES = [7e-5,2e-4,7e-4,2e-3,7e-3]
-        # SWEEP_VALUES = [2e-7, 7e-7, 2e-6, 7e-6, 2e-5, 7e-5, 2e-4, 7e-4]
+        SWEEP_VALUES = [1,2,3,4,5,6,7,8,9,10,20,30,50]
+        #SWEEP_VALUES = [2e-7, 7e-7, 2e-6, 7e-6, 2e-5, 7e-5, 2e-4, 7e-4]
         #SWEEP_VALUES = [1e-4, 1e-3, 1e-2]  # the values to test it at
         #PARAM_OVERRIDES = {"F_af0": 0.85}
         #PARAM_OVERRIDES = {"F_af0": 0.25}
         #PARAM_OVERRIDES = {"u_ps": 0}
-        PARAM_OVERRIDES = {"scat_loss": 8e-4, "S": 0.05, "u_ps":2.18e-4}
+        PARAM_OVERRIDES = {"scat_loss": 8e-4, "S": 0.05, "u_ps":2.18e-4, "compression": 3e-3}
         #PARAM_OVERRIDES = {"scat_loss": 8e-5}
+        # PARAM_OVERRIDES = {}  # any other run_realization() kwargs to hold constant across the sweep
 
         PARAM_SWEEP = [
          {"name": f"{SWEEP_PARAM}={v:g}", SWEEP_PARAM: v, **PARAM_OVERRIDES}
@@ -92,6 +93,7 @@ if __name__ == "__main__":
                     rainfall_source=SWEEP_RAINFALL_SOURCE, **kwargs,
                 )
                 runs.append(res)
+                print(f"  Realization {i+1}/{N_REALIZATIONS_PER_SETTING}: duration = {res['wall_time']:.2f} sec")
             sweep_results[name] = runs
 
         # ------ compare total_road_mass across parameter settings ------
@@ -351,139 +353,139 @@ if __name__ == "__main__":
             plt.show()
 
         if all(SWEEP_PARAM in params for params in PARAM_SWEEP):
-            # ------ sediment composition / supply ------
-            plot_metric_sweep(lambda res: res["Maf"][-1] / res["Ma"][-1],
-                               ylabel="Fines fraction in active layer [-]",
-                               title=f"Active-layer fines fraction vs. {SWEEP_PARAM}")
+        #     # ------ sediment composition / supply ------
+        #     plot_metric_sweep(lambda res: res["Maf"][-1] / res["Ma"][-1],
+        #                        ylabel="Fines fraction in active layer [-]",
+        #                        title=f"Active-layer fines fraction vs. {SWEEP_PARAM}")
 
-            plot_metric_sweep(lambda res: res["fine_sediment_pumped_kg"],
-                               ylabel="Fine sediment pumped [kg]",
-                               title=f"Fine sediment pumped vs. {SWEEP_PARAM}")
+        #     plot_metric_sweep(lambda res: res["fine_sediment_pumped_kg"],
+        #                        ylabel="Fine sediment pumped [kg]",
+        #                        title=f"Fine sediment pumped vs. {SWEEP_PARAM}")
 
-            plot_metric_sweep(lambda res: res["fine_sediment_scattered_kg"],
-                               ylabel="Fine sediment scattered [kg]",
-                               title=f"Fine sediment scattered vs. {SWEEP_PARAM}")
+        #     plot_metric_sweep(lambda res: res["fine_sediment_scattered_kg"],
+        #                        ylabel="Fine sediment scattered [kg]",
+        #                        title=f"Fine sediment scattered vs. {SWEEP_PARAM}")
 
-            plot_metric_sweep(lambda res: res["sediment_added_kg"],
-                               ylabel="Sediment added to active layer [kg]",
-                               title=f"Sediment added vs. {SWEEP_PARAM}")
+        #     plot_metric_sweep(lambda res: res["sediment_added_kg"],
+        #                        ylabel="Sediment added to active layer [kg]",
+        #                        title=f"Sediment added vs. {SWEEP_PARAM}")
 
-            # ------ physical road condition ------
-            plot_metric_sweep(lambda res: res["cum_road_elev_change_dz"][-1],
-                               ylabel="Cumulative elevation change [m]",
-                               title=f"Net road elevation change vs. {SWEEP_PARAM}")
+        #     # ------ physical road condition ------
+        #     plot_metric_sweep(lambda res: res["cum_road_elev_change_dz"][-1],
+        #                        ylabel="Cumulative elevation change [m]",
+        #                        title=f"Net road elevation change vs. {SWEEP_PARAM}")
 
-            plot_metric_sweep(lambda res: (res["sa_arr"][-1] - res["sa_arr"][0]) / (nrows * ncols) * 1000,
-                               ylabel="Active-layer depth change [mm]",
-                               title=f"Active-layer depth change vs. {SWEEP_PARAM}")
+        #     plot_metric_sweep(lambda res: (res["sa_arr"][-1] - res["sa_arr"][0]) / (nrows * ncols) * 1000,
+        #                        ylabel="Active-layer depth change [mm]",
+        #                        title=f"Active-layer depth change vs. {SWEEP_PARAM}")
 
-            plot_metric_sweep(lambda res: (res["ss_arr"][-1] - res["ss_arr"][0]) / (nrows * ncols) * 1000,
-                               ylabel="Surfacing-layer depth change [mm]",
-                               title=f"Surfacing-layer depth change vs. {SWEEP_PARAM}")
+        #     plot_metric_sweep(lambda res: (res["ss_arr"][-1] - res["ss_arr"][0]) / (nrows * ncols) * 1000,
+        #                        ylabel="Surfacing-layer depth change [mm]",
+        #                        title=f"Surfacing-layer depth change vs. {SWEEP_PARAM}")
 
-            plot_metric_sweep(lambda res: (res["sb_arr"][-1] - res["sb_arr"][0]) / (nrows * ncols) * 1000,
-                               ylabel="Ballast-layer depth change [mm]",
-                               title=f"Ballast-layer depth change vs. {SWEEP_PARAM}")
+        #     plot_metric_sweep(lambda res: (res["sb_arr"][-1] - res["sb_arr"][0]) / (nrows * ncols) * 1000,
+        #                        ylabel="Ballast-layer depth change [mm]",
+        #                        title=f"Ballast-layer depth change vs. {SWEEP_PARAM}")
 
-            # ------ hydraulics / shear behavior ------
-            plot_metric_sweep(lambda res: res["road_shear_cum_arr"][-1],
-                               ylabel="Fraction of road exceeding $\\tau_c$ [-]",
-                               title=f"Shear-stress exceedance vs. {SWEEP_PARAM}")
+        #     # ------ hydraulics / shear behavior ------
+        #     plot_metric_sweep(lambda res: res["road_shear_cum_arr"][-1],
+        #                        ylabel="Fraction of road exceeding $\\tau_c$ [-]",
+        #                        title=f"Shear-stress exceedance vs. {SWEEP_PARAM}")
             
-            # peak shear stress reached at any point during the run
-            # Peak mean shear stress, full road vs. truck_num_ini (with tau_c reference line)
-            x = np.array(SWEEP_VALUES)
-            values_by_setting = np.array([
-                [np.max(res["avg_shear_stress_ruts"]) for res in sweep_results[name]]
-                for name in sweep_labels
-            ])
-            n_seeds = values_by_setting.shape[1]
-            cmap = plt.get_cmap("viridis")
-            fig, ax = plt.subplots(figsize=(7, 5))
-            for seed_idx in range(n_seeds):
-                color = cmap(seed_idx / max(n_seeds - 1, 1))
-                ax.plot(x, values_by_setting[:, seed_idx], color=color, alpha=0.8,
-                        marker="o", markersize=3, linewidth=1, label=f"seed {seed_idx}")
-            ax.axhline(0.146, color="black", linestyle="--", linewidth=1, label=r"$\tau_c$ = 0.146")
-            ax.set_xlabel(SWEEP_PARAM)
-            ax.set_ylabel("Peak mean shear stress, ruts only [Pa]")
-            ax.set_title("Peak mean shear stress vs. truck_num_ini")
-            ax.legend(fontsize=7, ncol=2)
-            plt.tight_layout()
-            plt.show()
+            # # peak shear stress reached at any point during the run
+            # # Peak mean shear stress, full road vs. truck_num_ini (with tau_c reference line)
+            # x = np.array(SWEEP_VALUES)
+            # values_by_setting = np.array([
+            #     [np.max(res["avg_shear_stress_ruts"]) for res in sweep_results[name]]
+            #     for name in sweep_labels
+            # ])
+            # n_seeds = values_by_setting.shape[1]
+            # cmap = plt.get_cmap("viridis")
+            # fig, ax = plt.subplots(figsize=(7, 5))
+            # for seed_idx in range(n_seeds):
+            #     color = cmap(seed_idx / max(n_seeds - 1, 1))
+            #     ax.plot(x, values_by_setting[:, seed_idx], color=color, alpha=0.8,
+            #             marker="o", markersize=3, linewidth=1, label=f"seed {seed_idx}")
+            # ax.axhline(0.146, color="black", linestyle="--", linewidth=1, label=r"$\tau_c$ = 0.146")
+            # ax.set_xlabel(SWEEP_PARAM)
+            # ax.set_ylabel("Peak mean shear stress, ruts only [Pa]")
+            # ax.set_title("Peak mean shear stress vs. truck_num_ini")
+            # ax.legend(fontsize=7, ncol=2)
+            # plt.tight_layout()
+            # plt.show()
             
-            plot_metric_sweep(lambda res: res["avg_n_road"][-1],
-                               ylabel="Mean roughness, full road [-]",
-                               title=f"Roughness vs. {SWEEP_PARAM}")
+            # plot_metric_sweep(lambda res: res["avg_n_road"][-1],
+            #                    ylabel="Mean roughness, full road [-]",
+            #                    title=f"Roughness vs. {SWEEP_PARAM}")
 
-            plot_metric_sweep(lambda res: res["fs_avg_ruts"][-1],
-                               ylabel="Mean shear-stress partitioning fs, ruts only [-]",
-                               title=f"Shear partitioning vs. {SWEEP_PARAM}")
+            # plot_metric_sweep(lambda res: res["fs_avg_ruts"][-1],
+            #                    ylabel="Mean shear-stress partitioning fs, ruts only [-]",
+            #                    title=f"Shear partitioning vs. {SWEEP_PARAM}")
 
-            # ------ TPE-specific ------
-            plot_metric_sweep(lambda res: res["tpe_load_ruts"][-1],
-                               ylabel="Cumulative TPE load to ruts [kg]",
-                               title=f"TPE sediment load to ruts vs. {SWEEP_PARAM}")
+            # # ------ TPE-specific ------
+            # plot_metric_sweep(lambda res: res["tpe_load_ruts"][-1],
+            #                    ylabel="Cumulative TPE load to ruts [kg]",
+            #                    title=f"TPE sediment load to ruts vs. {SWEEP_PARAM}")
             
            
-            # ------ RUTS ONLY: layer mass states (mean kg per rut node, end of run) ------
-            for key, label in [
-                ("Maf_ruts", "Active-layer fines"),
-                ("Mac_ruts", "Active-layer coarse"),
-                ("Msf_ruts", "Surfacing-layer fines"),
-                ("Msc_ruts", "Surfacing-layer coarse"),
-                ("Mbf_ruts", "Ballast-layer fines"),
-                ("Mbc_ruts", "Ballast-layer coarse"),
-            ]:
-                plot_metric_sweep(lambda res, k=key: res[k][-1],
-                                  ylabel=f"{label} mass in ruts, end of run [kg/node]",
-                                  title=f"{label} mass (ruts) vs. {SWEEP_PARAM}")
+            # # ------ RUTS ONLY: layer mass states (mean kg per rut node, end of run) ------
+            # for key, label in [
+            #     ("Maf_ruts", "Active-layer fines"),
+            #     ("Mac_ruts", "Active-layer coarse"),
+            #     ("Msf_ruts", "Surfacing-layer fines"),
+            #     ("Msc_ruts", "Surfacing-layer coarse"),
+            #     ("Mbf_ruts", "Ballast-layer fines"),
+            #     ("Mbc_ruts", "Ballast-layer coarse"),
+            # ]:
+            #     plot_metric_sweep(lambda res, k=key: res[k][-1],
+            #                       ylabel=f"{label} mass in ruts, end of run [kg/node]",
+            #                       title=f"{label} mass (ruts) vs. {SWEEP_PARAM}")
 
-            # ------ RUTS ONLY: change from the true initial state ------
-            for key, label in [
-                ("Maf_ruts", "Active-layer fines"),
-                ("Mac_ruts", "Active-layer coarse"),
-                ("Msf_ruts", "Surfacing-layer fines"),
-                ("Msc_ruts", "Surfacing-layer coarse"),
-            ]:
-                plot_metric_sweep(lambda res, k=key: res[k][-1] - res["rut_ini"][k],
-                                  ylabel=f"{label} mass change in ruts [kg/node]",
-                                  title=f"{label} mass change (ruts) vs. {SWEEP_PARAM}")
+            # # ------ RUTS ONLY: change from the true initial state ------
+            # for key, label in [
+            #     ("Maf_ruts", "Active-layer fines"),
+            #     ("Mac_ruts", "Active-layer coarse"),
+            #     ("Msf_ruts", "Surfacing-layer fines"),
+            #     ("Msc_ruts", "Surfacing-layer coarse"),
+            # ]:
+            #     plot_metric_sweep(lambda res, k=key: res[k][-1] - res["rut_ini"][k],
+            #                       ylabel=f"{label} mass change in ruts [kg/node]",
+            #                       title=f"{label} mass change (ruts) vs. {SWEEP_PARAM}")
 
-            # ------ RUTS ONLY: fines fractions ------
-            plot_metric_sweep(lambda res: res["Maf_ruts"][-1] / (res["Maf_ruts"][-1] + res["Mac_ruts"][-1]),
-                              ylabel="Fines mass fraction, active layer, ruts [-]",
-                              title=f"Active-layer fines fraction (ruts) vs. {SWEEP_PARAM}")
+            # # ------ RUTS ONLY: fines fractions ------
+            # plot_metric_sweep(lambda res: res["Maf_ruts"][-1] / (res["Maf_ruts"][-1] + res["Mac_ruts"][-1]),
+            #                   ylabel="Fines mass fraction, active layer, ruts [-]",
+            #                   title=f"Active-layer fines fraction (ruts) vs. {SWEEP_PARAM}")
 
-            plot_metric_sweep(lambda res: res["Msf_ruts"][-1] / (res["Msf_ruts"][-1] + res["Msc_ruts"][-1]),
-                              ylabel="Fines mass fraction, surfacing layer, ruts [-]",
-                              title=f"Surfacing-layer fines fraction (ruts) vs. {SWEEP_PARAM}")
+            # plot_metric_sweep(lambda res: res["Msf_ruts"][-1] / (res["Msf_ruts"][-1] + res["Msc_ruts"][-1]),
+            #                   ylabel="Fines mass fraction, surfacing layer, ruts [-]",
+            #                   title=f"Surfacing-layer fines fraction (ruts) vs. {SWEEP_PARAM}")
 
-            plot_metric_sweep(lambda res: res["Mbf_ruts"][-1] / (res["Mbf_ruts"][-1] + res["Mbc_ruts"][-1]),
-                              ylabel="Fines mass fraction, ballast layer, ruts [-]",
-                              title=f"Ballast-layer fines fraction (ruts) vs. {SWEEP_PARAM}")
+            # plot_metric_sweep(lambda res: res["Mbf_ruts"][-1] / (res["Mbf_ruts"][-1] + res["Mbc_ruts"][-1]),
+            #                   ylabel="Fines mass fraction, ballast layer, ruts [-]",
+            #                   title=f"Ballast-layer fines fraction (ruts) vs. {SWEEP_PARAM}")
 
-            # Saf:Sac in the ruts -- the same quantity as your fine_frac map
-            plot_metric_sweep(lambda res: res["faf_ratio_ruts"][-1],
-                              ylabel="Saf:Sac in ruts, end of run [-]",
-                              title=f"Active-layer Saf:Sac (ruts) vs. {SWEEP_PARAM}")
+            # # Saf:Sac in the ruts -- the same quantity as your fine_frac map
+            # plot_metric_sweep(lambda res: res["faf_ratio_ruts"][-1],
+            #                   ylabel="Saf:Sac in ruts, end of run [-]",
+            #                   title=f"Active-layer Saf:Sac (ruts) vs. {SWEEP_PARAM}")
 
-            plot_metric_sweep(lambda res: res["faf_ratio_ruts"][-1] - res["faf_ratio_ruts_ini"],
-                              ylabel="Change in Saf:Sac in ruts [-]",
-                              title=f"Change in Saf:Sac (ruts) vs. {SWEEP_PARAM}")
+            # plot_metric_sweep(lambda res: res["faf_ratio_ruts"][-1] - res["faf_ratio_ruts_ini"],
+            #                   ylabel="Change in Saf:Sac in ruts [-]",
+            #                   title=f"Change in Saf:Sac (ruts) vs. {SWEEP_PARAM}")
 
-            # ------ RUTS ONLY: partitioning and roughness (already saved by the core) ------
-            plot_metric_sweep(lambda res: np.nanmean(res["fs_avg_ruts"]),
-                              ylabel="Mean fs over the run, ruts only [-]",
-                              title=f"Run-mean shear partitioning (ruts) vs. {SWEEP_PARAM}")
+            # # ------ RUTS ONLY: partitioning and roughness (already saved by the core) ------
+            # plot_metric_sweep(lambda res: np.nanmean(res["fs_avg_ruts"]),
+            #                   ylabel="Mean fs over the run, ruts only [-]",
+            #                   title=f"Run-mean shear partitioning (ruts) vs. {SWEEP_PARAM}")
 
-            plot_metric_sweep(lambda res: np.nanmin(res["fs_avg_ruts"]),
-                              ylabel="Minimum fs during the run, ruts only [-]",
-                              title=f"Minimum shear partitioning (ruts) vs. {SWEEP_PARAM}")
+            # plot_metric_sweep(lambda res: np.nanmin(res["fs_avg_ruts"]),
+            #                   ylabel="Minimum fs during the run, ruts only [-]",
+            #                   title=f"Minimum shear partitioning (ruts) vs. {SWEEP_PARAM}")
 
-            plot_metric_sweep(lambda res: res["avg_n_ruts"][-1],
-                              ylabel="Mean roughness n, ruts only, end of run [-]",
-                              title=f"Roughness in ruts vs. {SWEEP_PARAM}") 
+            # plot_metric_sweep(lambda res: res["avg_n_ruts"][-1],
+            #                   ylabel="Mean roughness n, ruts only, end of run [-]",
+            #                   title=f"Roughness in ruts vs. {SWEEP_PARAM}") 
 
             # ------ porosity decay time series, ALL settings and ALL seeds on one figure ------
             fig, ax = plt.subplots(figsize=(8, 5))
@@ -495,7 +497,7 @@ if __name__ == "__main__":
                     ax.plot(range(res["run_duration"]), res["phi_f_a_ruts_min"], color=color,
                             alpha=0.4, linewidth=0.8,
                             label=name if seed_idx == 0 else None)  # one legend entry per setting
-            ax.axhline(0.31, color="black", linestyle="--", linewidth=1, label="phi_limit = 0.31")
+            ax.axhline(0.28, color="black", linestyle="--", linewidth=1, label="phi_limit = 0.28")
             ax.set_xlabel("Day")
             ax.set_ylabel("Min Active-layer fine porosity in ruts [-]")
             ax.set_title("Porosity decay vs. day, all settings and seeds")
