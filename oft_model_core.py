@@ -83,9 +83,14 @@ n_c = 0.05
 n_f = 0.015
 
 # ------ D50, D95, tau_c ------
-d50_road = 0.0001  # [m]
-tau_c_road = 0.146
-d95 = 0.019
+d50 = [0.00001,0.000025,0.000035,0.000045, 0.0001] #[m] 
+tau_c_julien = [0.071, 0.088, 0.106, 0.146] #[Pa]
+tau_c_03 = [0.005,0.012,0.017,0.022,0.049] #[Pa]
+tau_c_05 = [0.008,0.020,0.028,0.036,0.081] #[Pa]
+
+d50_road = d50[0]
+tau_c_road = tau_c_03[0]
+d95=0.019 #[m]
 
 # ------ grid geometry ------
 cell_spacing = 0.1475 # cell width or length dimension in meters
@@ -153,7 +158,7 @@ def run_realization(seed, run_duration=run_duration_default,
                      rainfall_source="historical", rain_seed=None, grid_seed=None,
                      porosity_c=porosity_c, porosity_f=porosity_f,
                      truck_num_ini=truck_num_ini, S=S, u_ps=2.18e-4, u_pb=2.3e-6,
-                     F_af0=0.50, F_sf0=1, F_bc0=0.5, scat_loss=8e-4, compression=7e-4,
+                     F_af0=0.50, F_sf0=1, F_bc0=0.5, scat_loss=8e-4, compression=3e-3,
                      tau_c_road=tau_c_road, n_c=n_c, n_f=n_f, d50_road=d50_road,
                      rain_zero_prob=0.6, rain_lam=7, rain_duration_mean=8, rg_index=rg_index,
                      historical_csv_path_intensity="/home/adalvis/github/roads_model/input/WY2023_RG_daily_intensity.csv",
@@ -236,6 +241,19 @@ def run_realization(seed, run_duration=run_duration_default,
     dict of results/summary arrays for this realization. Also includes the
     parameter values actually used, for traceability across a sweep.
     """
+
+    # UNCOMMENT THESE LINES FOR RANDOMIZED PARAMETERS (S, u_ps, compression, scat_loss) PER REALIZATION
+    # rng_slope = np.random.default_rng(seed)
+    # rng_u_ps = np.random.default_rng(seed)
+    # rng_compression = np.random.default_rng(seed)
+    # rng_scat_loss = np.random.default_rng(seed)
+
+    # S = rng_slope.uniform(low=0.02, high=0.13)  # random slope for this realization
+    # u_ps = rng_u_ps.uniform(low=1.5e-4, high=3.0e-4)  # random u_ps for this realization
+    # compression = rng_compression.uniform(low=7e-4, high=7.0e-3)  # random compression for this realization
+    # scat_loss = rng_scat_loss.uniform(low=8e-4, high=8.0e-3)  # random scat_loss for this realization
+    
+    
     return_grid = return_grid or save_plots
     if rain_seed is None:
         rain_seed = seed
@@ -332,7 +350,7 @@ def run_realization(seed, run_duration=run_duration_default,
     eg = Erodible_Grid(
         nrows=nrows, ncols=ncols, spacing=cell_spacing,
         full_tire=full_tire, long_slope=S, road_peak=center, 
-        ditch=False, lat_slope=0.06,
+        ditch=False, lat_slope=0.045,
     )
     mg, z, road_flag, n = eg()
 
