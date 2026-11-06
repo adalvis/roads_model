@@ -58,7 +58,7 @@ intensity_index = 62
 #==================================
 # SET RANDOM SEED
 #==================================
-seed = 0
+seed = 42
 np.random.seed(seed)
 
 #==================================
@@ -71,11 +71,39 @@ intensity_run_dur = intensity[rain_gauge].iloc[intensity_index:].values
 dt_hours = pd.read_csv("input/WY2023_RG_daily_dt.csv")
 dt_hours_run_dur = dt_hours[rain_gauge].iloc[intensity_index:].values 
 
+# data = pd.read_csv("input/Case Low.csv")
+
+# def find_col(df, keyword):
+#     matches = [c for c in df.columns if keyword.lower() in c.lower()]
+#     if not matches:
+#         raise KeyError(f"No column containing '{keyword}' found. Actual columns: {df.columns.tolist()}")
+#     return matches[0]
+
+# intensity_col = find_col(data, "intensity")
+# dt_col_name = find_col(data, "dt")
+# day_col = find_col(data, "day")
+
+# data["_date"] = pd.to_datetime(data[day_col]).dt.date
+# step_hours = data[dt_col_name].iloc[0] / 60  # this file's row spacing (60 -> 1 hour/row)
+
+# daily = data.groupby("_date").apply(
+#     lambda g: pd.Series({
+#         "depth_mm": (g[intensity_col] * step_hours).sum(),
+#         "wet_hours": (g[intensity_col] > 0).sum() * step_hours,
+#     })
+# ).reset_index()
+
+# daily["avg_intensity"] = (daily["depth_mm"] / daily["wet_hours"].replace(0, np.nan)).fillna(0)
+
+# intensity_run_dur = daily["avg_intensity"].values
+# dt_hours_run_dur = daily["wet_hours"].values
+
 #Rainfall data for equilibrium run
 #(uncomment lines 71-74; comment other rainfall data lines)
-# intensity = np.ones(run_duration)*2
+# intensity = np.zeros(run_duration)
+# intensity[::2] = 8 #[mm/hr]; every other day has rainfall
 # intensity_run_dur = intensity.copy()
-# dt_hours = np.array([4 if x!=0 else 0 for x in intensity])
+# dt_hours = np.array([3 if x!=0 else 0 for x in intensity])
 # dt_hours_run_dur = dt_hours.copy()
 
 #Stochastically generated rainfall run
@@ -116,9 +144,14 @@ n_f = 0.015
 #==================================
 # DEFINE D50, D95, AND TAU_C
 #==================================
-d50_road = 0.0001 # [m] 
-tau_c_road = 0.146
-d95=0.019
+d50 = [0.00001,0.000025,0.000035,0.000045, 0.0001] #[m] 
+tau_c_julien = [0.071, 0.088, 0.106, 0.146] #[Pa]
+tau_c_03 = [0.005,0.012,0.017,0.022,0.049] #[Pa]
+tau_c_05 = [0.008,0.020,0.028,0.036,0.081] #[Pa]
+
+d50_road = d50[0]
+tau_c_road = tau_c_03[0]
+d95=0.019 #[m]
 
 # %% 
 # CREATE GRID; ADD FIELDS; ADD RANDOM NOISE
@@ -129,7 +162,7 @@ cell_spacing = 0.1475 # cell width or length dimension in meters
 cell_area = cell_spacing**2
 nrows = 540 # number of rows in the grid
 ncols = 65  # number of columns in the grid (NO DITCH)
-row = 15  # row to extract cross-section from
+row = 16  # row to extract cross-section from
 
 #We're using half tire width for node spacing
 center = int(np.ceil(ncols/2-1))
@@ -139,7 +172,7 @@ full_tire = False
 eg = Erodible_Grid(
     nrows=nrows, ncols=ncols, spacing=cell_spacing, 
     full_tire=full_tire, long_slope=S, road_peak=center, 
-    ditch=False, lat_slope=0.06
+    ditch=False, lat_slope=0.045
     )
 
 mg, z, road_flag, n = eg() 
@@ -188,6 +221,8 @@ intensity_arr=[]
 dt_arr = []
 dz_arr=[]
 dz_arr_cum = []
+
+phi_f_a_ruts_min = []# np.zeros(run_duration)
 
 #Depths for each layer
 sa_arr = np.zeros(run_duration)
@@ -270,10 +305,12 @@ tpe = TruckPassErosion(
                     half_width,
                     full_tire, 
                     truck_num=truck_num_ini,
-                    F_af0 = 0.5, 
+                    F_af0 = 1.0, 
                     F_sf0 = 1, 
                     F_bc0 = 0.5, 
-                    scat_loss=8e-4, 
+                    scat_loss=8e-4,
+                    compression=3e-3,
+                    u_ps=2.18e-4, 
                     porosity_c=porosity_c, 
                     porosity_f=porosity_f,
                     )
@@ -411,7 +448,9 @@ for i in range(0, run_duration): # daily time step
     # if i >= 30 and i < run_duration-30:
     tpe.run_one_step()
     truck_num += tpe.truck_num
-    
+
+    phi_f_a_ruts_min.append(mg.at_node['phi_f_a'][mg.nodes[row, :]])
+
     intensity = intensity_run_dur[i]  # use the i-th day's intensity
     dt_day = dt[i] # use the i-th day's time step
 
@@ -465,7 +504,7 @@ for i in range(0, run_duration): # daily time step
         Mbf[i] = np.sum(mg.at_node['ballast__mass_fines'])
         Mbc[i] = np.sum(mg.at_node['ballast__mass_coarse'])
         
-        oft._Maf_plot.append(oft._Saf[oft.grid.nodes[oft._row, :]]/oft._Sac[oft.grid.nodes[oft._row, :]])#oft._Maf[oft.grid.nodes[oft._row,:]])
+        oft._Maf_plot.append(mg.at_node['active__mass_fines'][mg.nodes[row, :]]/mg.at_node['active__mass_coarse'][mg.nodes[row, :]])
         oft._t_plot.append(86400)
     #==================================
     # RAINFALL
@@ -526,7 +565,7 @@ for i in range(0, run_duration): # daily time step
         dz_cum = z-z_ini_cum # calculate cumulative elevation change
         dz_arr_cum.append(sum(dz_cum[full_road.flatten()])) 
 
-        oft._Maf_plot.append(oft._Saf[oft.grid.nodes[oft._row, :]]/oft._Sac[oft.grid.nodes[oft._row, :]])#oft._Maf[oft.grid.nodes[oft._row,:]])
+        oft._Maf_plot.append(mg.at_node['active__mass_fines'][mg.nodes[row, :]]/mg.at_node['active__mass_coarse'][mg.nodes[row, :]])
         oft._t_plot.append((1-dt_day)*86400)
 
         #==================================
@@ -1040,13 +1079,33 @@ t = np.array(oft._t_plot).cumsum()/86400
 Maf_atnode = np.array(oft._Maf_plot)
 
 cmap=plt.get_cmap('viridis')
-norm = plt.Normalize(21, 44)
-for x in range(21, 44):
+norm = plt.Normalize(26, 28)
+for x in range(26, 28):
     plt.plot(t, Maf_atnode[:,x], label=x, color=cmap(norm(x)))
-    plt.xlabel("Duration of rainfall (days)")
-    plt.ylabel("$S_{af}:S_{ac}$ at given node")
+    plt.xlabel("Duration (days)")
+    plt.ylabel("$M_{af}:M_{ac}$ at given node")
     plt.title(r'row=%i' %row)
     plt.legend(ncols=3)
+plt.show()
+
+#%%
+# PHI LIMIT PLOTS
+#==================================
+fig, ax = plt.subplots()
+cmap = plt.get_cmap("viridis")
+norm = plt.Normalize(22, 42)
+
+day = range(0, run_duration)
+
+for x in range(22, 42):
+    plt.plot(day, np.array(phi_f_a_ruts_min)[:, x], label=x, color=cmap(norm(x)))
+
+ax.axhline(0.28, color="black", linestyle="--", linewidth=1, label="phi_limit = 0.28")
+plt.xlabel("Duration (days)")
+plt.ylabel(r"$\phi_{limit}$ at given node")
+plt.title(r'row=%i' %row)
+plt.legend(ncols=3)
+plt.tight_layout()
 plt.show()
 
 # %%
